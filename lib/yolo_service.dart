@@ -181,12 +181,13 @@ class YoloService {
 
     final int padX = ((_inputWidth - resizedWidth) / 2).floor();
     final int padY = ((_inputHeight - resizedHeight) / 2).floor();
+    final paddingColor = img.ColorRgb8(114, 114, 114);
     final img.Image letterboxed = img.Image(
       width: _inputWidth,
       height: _inputHeight,
     );
-    img.fill(letterboxed, img.getColor(114, 114, 114));
-    img.copyInto(letterboxed, resized, dstX: padX, dstY: padY);
+    img.fill(letterboxed, color: paddingColor);
+    img.compositeImage(letterboxed, resized, dstX: padX, dstY: padY);
 
     // Convert to Float32 input tensor [1, H, W, C].
     final Float32List inputBuffer =
@@ -194,11 +195,11 @@ class YoloService {
 
     for (int y = 0; y < _inputHeight; y++) {
       for (int x = 0; x < _inputWidth; x++) {
-        final int pixel = letterboxed.getPixel(x, y);
+        final img.Pixel pixel = letterboxed.getPixel(x, y);
         final int offset = (y * _inputWidth + x) * _inputChannels;
-        final double r = img.getRed(pixel).toDouble();
-        final double g = img.getGreen(pixel).toDouble();
-        final double b = img.getBlue(pixel).toDouble();
+        final double r = pixel.r.toDouble();
+        final double g = pixel.g.toDouble();
+        final double b = pixel.b.toDouble();
 
         // YOLO11 exports expect float RGB input normalized to [0, 1]. No
         // additional mean/std offset is required for the default Ultralytics
