@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -17,7 +15,7 @@ class AssetModelProvider implements ModelProvider {
     const String assetPath = 'assets/models/yolo11n.tflite';
 
     final ByteData modelBytes = await rootBundle.load(assetPath);
-    final Uint8List buffer = modelBytes.buffer.asUint8List();
+    final buffer = modelBytes.buffer.asUint8List();
 
     // A guard to avoid confusing runtime errors if the asset is replaced with
     // a placeholder text file.

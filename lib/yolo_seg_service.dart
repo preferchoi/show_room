@@ -74,7 +74,7 @@ class YoloSegService {
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList();
-    } on FlutterError {
+    } catch (_) {
       _labels = [];
     }
 
@@ -169,9 +169,9 @@ class YoloSegService {
     for (int y = 0; y < _inputHeight; y++) {
       for (int x = 0; x < _inputWidth; x++) {
         final pixel = resized.getPixel(x, y);
-        final r = img.getRed(pixel) / 255.0;
-        final g = img.getGreen(pixel) / 255.0;
-        final b = img.getBlue(pixel) / 255.0;
+        final r = _getRed(pixel) / 255.0;
+        final g = _getGreen(pixel) / 255.0;
+        final b = _getBlue(pixel) / 255.0;
         inputBuffer[idx++] = r;
         inputBuffer[idx++] = g;
         inputBuffer[idx++] = b;
@@ -187,6 +187,12 @@ class YoloSegService {
       originalHeight: originalHeight,
     );
   }
+
+  int _getRed(int color) => (color >> 16) & 0xFF;
+
+  int _getGreen(int color) => (color >> 8) & 0xFF;
+
+  int _getBlue(int color) => color & 0xFF;
 
   /// Reshapes a flat Float32List into a nested List structure matching [shape].
   /// This is required because the TFLite interpreter expects properly nested
@@ -427,7 +433,19 @@ class YoloSegService {
       height: targetHeight,
       interpolation: img.Interpolation.nearest,
     );
-    return Uint8List.fromList(resized.getBytes(format: img.Format.luminance));
+    final Uint8List luminance = Uint8List(resized.width * resized.height);
+    int idx = 0;
+    for (int y = 0; y < resized.height; y++) {
+      for (int x = 0; x < resized.width; x++) {
+        final pixel = resized.getPixel(x, y);
+        luminance[idx++] = img.getLuminanceRgb(
+          _getRed(pixel),
+          _getGreen(pixel),
+          _getBlue(pixel),
+        );
+      }
+    }
+    return luminance;
   }
 
   double _sigmoid(double x) => 1 / (1 + exp(-x));
