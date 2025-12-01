@@ -43,25 +43,18 @@ class MockDetectionRepository implements DetectionRepository {
     final Uint8List sceneBytes = imageBytes.isNotEmpty ? imageBytes : sampleBytes;
     final _ImageSize imageSize =
         await _decodeImageSize(sceneBytes) ?? const _ImageSize(sampleImageWidth, sampleImageHeight);
-    // Coordinates are defined against the 600x400 sample image (see
-    // [sampleImageWidth]/[sampleImageHeight] constants).
-    const objects = [
-      DetectedObject(
-        id: 'desk_1',
-        label: 'Desk',
-        bbox: Rect.fromLTWH(80, 180, 200, 140),
-      ),
-      DetectedObject(
-        id: 'chair_1',
-        label: 'Chair',
-        bbox: Rect.fromLTWH(320, 200, 120, 140),
-      ),
-      DetectedObject(
-        id: 'plant_1',
-        label: 'Plant',
-        bbox: Rect.fromLTWH(480, 100, 70, 120),
-      ),
-    ];
+
+    final double scaleX = imageSize.width / sampleImageWidth;
+    final double scaleY = imageSize.height / sampleImageHeight;
+
+    final List<DetectedObject> objects = _sampleObjects
+        .map(
+          (obj) => obj.toDetected(
+            scaleX: scaleX,
+            scaleY: scaleY,
+          ),
+        )
+        .toList(growable: false);
 
     return SceneDetectionResult(
       imageBytes: sceneBytes,
@@ -71,6 +64,52 @@ class MockDetectionRepository implements DetectionRepository {
     );
   }
 }
+
+class _SampleObject {
+  const _SampleObject({
+    required this.id,
+    required this.label,
+    required this.bbox,
+  });
+
+  final String id;
+  final String label;
+  final Rect bbox;
+
+  DetectedObject toDetected({required double scaleX, required double scaleY}) {
+    final Rect scaled = Rect.fromLTRB(
+      bbox.left * scaleX,
+      bbox.top * scaleY,
+      bbox.right * scaleX,
+      bbox.bottom * scaleY,
+    );
+    return DetectedObject(
+      id: id,
+      label: label,
+      bbox: scaled,
+    );
+  }
+}
+
+// Coordinates are defined against the 600x400 sample image (see
+// [sampleImageWidth]/[sampleImageHeight] constants).
+const List<_SampleObject> _sampleObjects = [
+  _SampleObject(
+    id: 'desk_1',
+    label: 'Desk',
+    bbox: Rect.fromLTWH(80, 180, 200, 140),
+  ),
+  _SampleObject(
+    id: 'chair_1',
+    label: 'Chair',
+    bbox: Rect.fromLTWH(320, 200, 120, 140),
+  ),
+  _SampleObject(
+    id: 'plant_1',
+    label: 'Plant',
+    bbox: Rect.fromLTWH(480, 100, 70, 120),
+  ),
+];
 
 class _ImageSize {
   const _ImageSize(this.width, this.height);
