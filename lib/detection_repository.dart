@@ -19,6 +19,16 @@ class MockDetectionRepository implements DetectionRepository {
 
   Uint8List? _cachedBytes;
 
+  Future<_ImageSize?> _decodeImageSize(Uint8List bytes) async {
+    try {
+      final codec = await instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      return _ImageSize(frame.image.width, frame.image.height);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Uint8List> _loadSampleBytes() async {
     if (_cachedBytes != null) return _cachedBytes!;
     // Decode the embedded base64 image instead of depending on an external
@@ -30,6 +40,9 @@ class MockDetectionRepository implements DetectionRepository {
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {
     final Uint8List sampleBytes = await _loadSampleBytes();
+    final Uint8List sceneBytes = imageBytes.isNotEmpty ? imageBytes : sampleBytes;
+    final _ImageSize imageSize =
+        await _decodeImageSize(sceneBytes) ?? const _ImageSize(sampleImageWidth, sampleImageHeight);
     // Coordinates are defined against the 600x400 sample image (see
     // [sampleImageWidth]/[sampleImageHeight] constants).
     const objects = [
@@ -51,12 +64,19 @@ class MockDetectionRepository implements DetectionRepository {
     ];
 
     return SceneDetectionResult(
-      imageBytes: sampleBytes,
-      width: sampleImageWidth,
-      height: sampleImageHeight,
+      imageBytes: sceneBytes,
+      width: imageSize.width,
+      height: imageSize.height,
       objects: objects,
     );
   }
+}
+
+class _ImageSize {
+  const _ImageSize(this.width, this.height);
+
+  final int width;
+  final int height;
 }
 
 /// YOLO-backed implementation that delegates to [YoloService].
