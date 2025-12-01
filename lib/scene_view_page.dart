@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'label_localizer.dart';
 import 'models.dart';
 import 'object_button.dart';
 import 'scene_state.dart';
@@ -21,6 +22,8 @@ class SceneViewPage extends StatelessWidget {
         body: Center(child: Text('No scene loaded yet')),
       );
     }
+
+    final labelLocalizer = LabelLocalizer();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Scene viewer')),
@@ -66,7 +69,11 @@ class SceneViewPage extends StatelessWidget {
                     isSelected: isSelected,
                     onTap: () {
                       sceneState.selectObject(object.id);
-                      _showObjectSheet(context, object);
+                      _showObjectSheet(
+                        context,
+                        object,
+                        labelLocalizer.localize(object.label, context),
+                      );
                     },
                   ),
                 );
@@ -78,7 +85,11 @@ class SceneViewPage extends StatelessWidget {
     );
   }
 
-  void _showObjectSheet(BuildContext context, DetectedObject object) {
+  void _showObjectSheet(
+    BuildContext context,
+    DetectedObject object,
+    String localizedLabel,
+  ) {
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -90,7 +101,7 @@ class SceneViewPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  object.label,
+                  localizedLabel,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),

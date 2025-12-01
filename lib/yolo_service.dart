@@ -7,17 +7,20 @@ import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 import 'models.dart';
+import 'model_provider.dart';
 
 /// Service that loads a YOLO11n detection model and runs inference on-device.
 ///
 /// Call [init] once before invoking [detect]. This service keeps the
 /// interpreter alive for reuse.
 class YoloService {
-  YoloService._internal();
+  YoloService._internal({ModelProvider? modelProvider})
+      : _modelProvider = modelProvider ?? AssetModelProvider();
 
   static final YoloService instance = YoloService._internal();
 
   Interpreter? _interpreter;
+  ModelProvider _modelProvider;
   List<String> _labels = [];
 
   int _inputWidth = 0;
@@ -31,13 +34,24 @@ class YoloService {
   // if your YOLO11n export requires it. The parsing code assumes a standard
   // detection head layout; adjust as necessary for your model.
 
+  /// Allows swapping the interpreter provider (e.g., downloaded model) before
+  /// initialization.
+  void setModelProvider(ModelProvider provider) {
+    if (_interpreter != null) {
+      throw StateError('Cannot swap model provider after initialization.');
+    }
+    _modelProvider = provider;
+  }
+
   /// Loads the TFLite model and labels. Safe to call multiple times; the
   /// interpreter is created only once.
   Future<void> init() async {
     if (_interpreter != null) return;
 
-    // Asset path must match pubspec.yaml configuration.
-    _interpreter = await Interpreter.fromAsset('models/yolo11n.tflite');
+    // Asset path must match pubspec.yaml configuration. Alternate providers
+    // (e.g., downloaded files) can be injected via [setModelProvider] without
+    // changing the rest of the pipeline.
+    _interpreter = await _modelProvider.loadInterpreter();
     assert(_interpreter != null, 'Failed to create TFLite interpreter');
 
     // Capture input tensor shape: [1, height, width, channels].
