@@ -27,7 +27,7 @@ class YoloService {
   int _inputHeight = 0;
   int _inputChannels = 0;
 
-  double _confidenceThreshold = 0.3;
+  double _confidenceThreshold = 0.25;
   double _iouThreshold = 0.45;
 
   // TODO: Fill in model-specific metadata such as number of classes or anchors
@@ -71,7 +71,7 @@ class YoloService {
     }
 
     // Load labels.
-    final String rawLabels = await rootBundle.loadString('models/labels.txt');
+    final String rawLabels = await rootBundle.loadString('assets/models/labels.txt');
     _labels = rawLabels.split('\n').where((e) => e.trim().isNotEmpty).toList();
 
     // init() must be awaited once before calling detect().
@@ -99,8 +99,7 @@ class YoloService {
     final List<DetectedObject> detections = _parseDetections(
       outputBuffer,
       outputShape,
-      prep.originalWidth,
-      prep.originalHeight,
+      prep,
     );
 
     return SceneDetectionResult(
@@ -120,13 +119,28 @@ class YoloService {
     final int originalWidth = decoded.width;
     final int originalHeight = decoded.height;
 
-    // Resize to model input size.
+    // Letterbox resize while keeping aspect ratio. YOLO exports expect padding
+    // filled with mid-gray (114) and coordinates relative to the padded image.
+    final double scale =
+        min(_inputWidth / originalWidth, _inputHeight / originalHeight);
+    final int resizedWidth = (originalWidth * scale).round();
+    final int resizedHeight = (originalHeight * scale).round();
+
     final img.Image resized = img.copyResize(
       decoded,
-      width: _inputWidth,
-      height: _inputHeight,
+      width: resizedWidth,
+      height: resizedHeight,
       interpolation: img.Interpolation.linear,
     );
+
+    final int padX = ((_inputWidth - resizedWidth) / 2).floor();
+    final int padY = ((_inputHeight - resizedHeight) / 2).floor();
+    final img.Image letterboxed = img.Image(
+      width: _inputWidth,
+      height: _inputHeight,
+    );
+    img.fill(letterboxed, img.getColor(114, 114, 114));
+    img.copyInto(letterboxed, resized, dstX: padX, dstY: padY);
 
     // Convert to Float32 input tensor [1, H, W, C].
     final Float32List inputBuffer =
@@ -134,13 +148,15 @@ class YoloService {
 
     for (int y = 0; y < _inputHeight; y++) {
       for (int x = 0; x < _inputWidth; x++) {
-        final int pixel = resized.getPixel(x, y);
+        final int pixel = letterboxed.getPixel(x, y);
         final int offset = (y * _inputWidth + x) * _inputChannels;
         final double r = img.getRed(pixel).toDouble();
         final double g = img.getGreen(pixel).toDouble();
         final double b = img.getBlue(pixel).toDouble();
 
-        // TODO: Adjust normalization to match your YOLO export (e.g. mean/std).
+        // YOLO11 exports expect float RGB input normalized to [0, 1]. No
+        // additional mean/std offset is required for the default Ultralytics
+        // export.
         inputBuffer[offset + 0] = r / 255.0;
         if (_inputChannels > 1) inputBuffer[offset + 1] = g / 255.0;
         if (_inputChannels > 2) inputBuffer[offset + 2] = b / 255.0;
@@ -151,14 +167,16 @@ class YoloService {
       inputBuffer: inputBuffer,
       originalWidth: originalWidth,
       originalHeight: originalHeight,
+      scale: scale,
+      padX: padX.toDouble(),
+      padY: padY.toDouble(),
     );
   }
 
   List<DetectedObject> _parseDetections(
     List<double> rawOutput,
     List<int> outputShape,
-    int originalWidth,
-    int originalHeight,
+    _PreprocessResult prep,
   ) {
     // The parsing below assumes an output shape like [1, num_predictions, values]
     // where values = 4 bbox + 1 objectness + num_classes. Adjust as needed for
@@ -167,19 +185,26 @@ class YoloService {
       throw StateError('Unexpected output shape: $outputShape');
     }
 
-    final int numPredictions = outputShape[1];
-    final int valuesPerPrediction = outputShape[2];
+    final bool valuesLast = outputShape[2] <= outputShape[1];
+    final int numPredictions = valuesLast ? outputShape[1] : outputShape[2];
+    final int valuesPerPrediction = valuesLast ? outputShape[2] : outputShape[1];
+
+    double readValue(int predictionIndex, int valueIndex) {
+      if (valuesLast) {
+        final int baseIndex = predictionIndex * valuesPerPrediction;
+        return rawOutput[baseIndex + valueIndex];
+      }
+      final int baseIndex = valueIndex * numPredictions;
+      return rawOutput[baseIndex + predictionIndex];
+    }
 
     final List<_RawDetection> candidates = [];
     for (int i = 0; i < numPredictions; i++) {
-      final int baseIndex = i * valuesPerPrediction;
-
-      // TODO: Map indices to your model's bbox/objectness/class predictions.
-      final double xCenter = rawOutput[baseIndex + 0];
-      final double yCenter = rawOutput[baseIndex + 1];
-      final double width = rawOutput[baseIndex + 2];
-      final double height = rawOutput[baseIndex + 3];
-      final double objectness = rawOutput[baseIndex + 4];
+      final double xCenter = readValue(i, 0);
+      final double yCenter = readValue(i, 1);
+      final double width = readValue(i, 2);
+      final double height = readValue(i, 3);
+      final double objectness = readValue(i, 4);
 
       // Class scores start at index 5.
       final int numClasses = valuesPerPrediction - 5;
@@ -187,7 +212,7 @@ class YoloService {
       double bestClassScore = -double.infinity;
       int bestClassIndex = -1;
       for (int c = 0; c < numClasses; c++) {
-        final double classScore = rawOutput[baseIndex + 5 + c];
+        final double classScore = readValue(i, 5 + c);
         if (classScore > bestClassScore) {
           bestClassScore = classScore;
           bestClassIndex = c;
@@ -197,21 +222,30 @@ class YoloService {
       final double confidence = objectness * bestClassScore;
       if (confidence < _confidenceThreshold) continue;
 
-      // TODO: Confirm whether bbox is normalized (0-1) or absolute pixels.
-      final double xMin = (xCenter - width / 2);
-      final double yMin = (yCenter - height / 2);
-      final double xMax = (xCenter + width / 2);
-      final double yMax = (yCenter + height / 2);
+      // YOLO exports return center-x/y and width/height relative to the
+      // letterboxed image. Some exports emit normalized [0, 1] coordinates;
+      // others use absolute pixels. Normalize to the padded input first, then
+      // remove padding and unscale back to the original image space.
+      final bool normalizedBbox =
+          xCenter <= 1.0 && yCenter <= 1.0 && width <= 1.0 && height <= 1.0;
+      final double boxX = normalizedBbox ? xCenter * _inputWidth : xCenter;
+      final double boxY = normalizedBbox ? yCenter * _inputHeight : yCenter;
+      final double boxW = normalizedBbox ? width * _inputWidth : width;
+      final double boxH = normalizedBbox ? height * _inputHeight : height;
 
-      // If coordinates are normalized, scale by _inputWidth/_inputHeight here.
-      final double scaleX = originalWidth / _inputWidth;
-      final double scaleY = originalHeight / _inputHeight;
-      final Rect rect = Rect.fromLTRB(
-        xMin * scaleX,
-        yMin * scaleY,
-        xMax * scaleX,
-        yMax * scaleY,
-      );
+      double xMin = boxX - boxW / 2 - prep.padX;
+      double yMin = boxY - boxH / 2 - prep.padY;
+      double xMax = boxX + boxW / 2 - prep.padX;
+      double yMax = boxY + boxH / 2 - prep.padY;
+
+      xMin = (xMin / prep.scale).clamp(0, prep.originalWidth.toDouble());
+      yMin = (yMin / prep.scale).clamp(0, prep.originalHeight.toDouble());
+      xMax = (xMax / prep.scale).clamp(0, prep.originalWidth.toDouble());
+      yMax = (yMax / prep.scale).clamp(0, prep.originalHeight.toDouble());
+
+      if (xMax <= xMin || yMax <= yMin) continue;
+
+      final Rect rect = Rect.fromLTRB(xMin, yMin, xMax, yMax);
 
       final String label =
           (bestClassIndex >= 0 && bestClassIndex < _labels.length)
@@ -286,11 +320,17 @@ class _PreprocessResult {
     required this.inputBuffer,
     required this.originalWidth,
     required this.originalHeight,
+    required this.scale,
+    required this.padX,
+    required this.padY,
   });
 
   final Float32List inputBuffer;
   final int originalWidth;
   final int originalHeight;
+  final double scale;
+  final double padX;
+  final double padY;
 }
 
 class _RawDetection {
