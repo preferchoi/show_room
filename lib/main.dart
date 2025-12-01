@@ -198,7 +198,9 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
   @override
   Widget build(BuildContext context) {
     if (useMockDetection || _initStatus == _InitStatus.success) {
-      return const SceneViewPage();
+      return SceneViewPage(
+        imageSourceProvider: _imageSourceProvider,
+      );
     }
 
     return Scaffold(

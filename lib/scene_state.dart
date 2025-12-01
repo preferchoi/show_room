@@ -24,6 +24,14 @@ class SceneState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Runs detection again using the currently loaded image, if any.
+  Future<void> reloadCurrentScene() async {
+    final scene = currentScene;
+    if (scene == null) return;
+
+    await loadScene(scene.imageBytes);
+  }
+
   /// Select a specific object by its id and notify listeners.
   void selectObject(String id) {
     selectedObjectId = id;
