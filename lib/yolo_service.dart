@@ -304,18 +304,20 @@ class YoloService {
       final double width = readValue(i, 2);
       final double height = readValue(i, 3);
 
-      final double objectness = hasObjectness ? readValue(i, 4) : 1.0;
-      double bestClassScore = -double.infinity;
+      final double objectnessLogit = hasObjectness ? readValue(i, 4) : 0.0;
+      double bestClassLogit = -double.infinity;
       int bestClassIndex = -1;
       for (int c = 0; c < numClasses; c++) {
         final double classScore = readValue(i, classOffset + c);
-        if (classScore > bestClassScore) {
-          bestClassScore = classScore;
+        if (classScore > bestClassLogit) {
+          bestClassLogit = classScore;
           bestClassIndex = c;
         }
       }
 
-      final double confidence = max(0.0, objectness) * max(0.0, bestClassScore);
+      final double objectnessProb = hasObjectness ? _sigmoid(objectnessLogit) : 1.0;
+      final double bestClassProb = _sigmoid(bestClassLogit);
+      final double confidence = objectnessProb * bestClassProb;
       if (confidence < _confidenceThreshold) continue;
 
       // YOLO exports return center-x/y and width/height relative to the
@@ -409,6 +411,8 @@ class YoloService {
     if (unionArea == 0) return 0;
     return intersectionArea / unionArea;
   }
+
+  double _sigmoid(double x) => 1 / (1 + exp(-x));
 }
 
 class PreprocessResult {

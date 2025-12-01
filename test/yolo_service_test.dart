@@ -61,4 +61,97 @@ void main() {
     expect(detection.bbox.right, closeTo(370, 1e-3));
     expect(detection.bbox.bottom, closeTo(345, 1e-3));
   });
+
+  test('parseDetections converts logits to probabilities', () {
+    final service = YoloService.instance;
+    service.debugConfigure(
+      inputWidth: 640,
+      inputHeight: 640,
+      labels: const ['person', 'car'],
+      confidenceThreshold: 0.01,
+    );
+
+    const shape = [1, 1, 7];
+    final rawOutput = <double>[
+      // Prediction 0 (logits)
+      200, // cx
+      200, // cy
+      40, // w
+      40, // h
+      -4, // objectness logit -> ~0.018 prob
+      -2, // class 0 logit
+      4, // class 1 logit -> ~0.982 prob
+    ];
+
+    const prep = PreprocessResult(
+      inputBuffer: Float32List(0),
+      originalWidth: 400,
+      originalHeight: 400,
+      scale: 1,
+      padX: 0,
+      padY: 0,
+    );
+
+    final detections =
+        service.parseDetectionsForTest(rawOutput, shape, prep);
+
+    expect(detections, hasLength(1));
+    final detection = detections.single;
+    expect(detection.label, 'car');
+    expect(detection.bbox.left, closeTo(180, 1e-3));
+    expect(detection.bbox.top, closeTo(180, 1e-3));
+    expect(detection.bbox.right, closeTo(220, 1e-3));
+    expect(detection.bbox.bottom, closeTo(220, 1e-3));
+  });
+
+  test('parseDetections keeps highest scoring box after NMS with logits', () {
+    final service = YoloService.instance;
+    service.debugConfigure(
+      inputWidth: 640,
+      inputHeight: 640,
+      labels: const ['person', 'car'],
+      confidenceThreshold: 0.05,
+      iouThreshold: 0.5,
+    );
+
+    const shape = [1, 2, 7];
+    final rawOutput = <double>[
+      // Prediction 0
+      320,
+      320,
+      100,
+      50,
+      3, // objectness logit -> strong prob
+      -1, // class 0
+      1, // class 1 -> best
+      // Prediction 1 (overlapping, lower confidence)
+      322,
+      322,
+      100,
+      50,
+      1, // objectness logit
+      2, // class 0 -> best
+      -2,
+    ];
+
+    const prep = PreprocessResult(
+      inputBuffer: Float32List(0),
+      originalWidth: 640,
+      originalHeight: 640,
+      scale: 1,
+      padX: 0,
+      padY: 0,
+    );
+
+    final detections =
+        service.parseDetectionsForTest(rawOutput, shape, prep);
+
+    expect(detections, hasLength(1));
+    final detection = detections.single;
+    expect(detection.label, 'car');
+    expect(detection.bbox.left, closeTo(270, 1e-3));
+    expect(detection.bbox.top, closeTo(295, 1e-3));
+    expect(detection.bbox.right, closeTo(370, 1e-3));
+    expect(detection.bbox.bottom, closeTo(345, 1e-3));
+  });
 }
