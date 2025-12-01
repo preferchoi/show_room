@@ -22,6 +22,19 @@ class AppLocalizations {
   String get appTitle => _stringFor('appTitle');
   String get sceneViewerTitle => _stringFor('sceneViewerTitle');
   String get noSceneLoaded => _stringFor('noSceneLoaded');
+  String objectIdLabel(String id) => _format('objectIdLabel', {'id': id});
+  String get objectBoundingBoxTitle => _stringFor('objectBoundingBoxTitle');
+  String objectBoundingBoxPosition(String x, String y) =>
+      _format('objectBoundingBoxPosition', {'x': x, 'y': y});
+  String objectBoundingBoxSize(String width, String height) =>
+      _format('objectBoundingBoxSize', {'width': width, 'height': height});
+  String get objectActionsTitle => _stringFor('objectActionsTitle');
+  String objectDescription(String label) =>
+      _format('objectDescription', {'label': label});
+  String get objectSearchAction => _stringFor('objectSearchAction');
+  String get objectCopyAction => _stringFor('objectCopyAction');
+  String get objectCopySuccess => _stringFor('objectCopySuccess');
+  String get objectSearchError => _stringFor('objectSearchError');
 
   /// Returns a localized label for the model class name, or null if none is
   /// available for the current locale.
@@ -36,6 +49,14 @@ class AppLocalizations {
         key;
   }
 
+  String _format(String key, Map<String, String> replacements) {
+    final template = _stringFor(key);
+    return replacements.entries.fold(
+      template,
+      (value, entry) => value.replaceAll('{${entry.key}}', entry.value),
+    );
+  }
+
   String get _localeCode {
     final canonicalized = Intl.canonicalizedLocale(locale.toString());
     return canonicalized.split('_').first;
@@ -46,11 +67,31 @@ class AppLocalizations {
       'appTitle': 'Scene Overlay Demo',
       'sceneViewerTitle': 'Scene viewer',
       'noSceneLoaded': 'No scene loaded yet',
+      'objectIdLabel': 'ID: {id}',
+      'objectBoundingBoxTitle': 'Bounding box',
+      'objectBoundingBoxPosition': 'Position: ({x}, {y})',
+      'objectBoundingBoxSize': 'Size: {width} × {height}',
+      'objectActionsTitle': 'Next actions',
+      'objectDescription': 'Detected as {label}. Explore or share more details.',
+      'objectSearchAction': 'Search on the web',
+      'objectCopyAction': 'Copy object summary',
+      'objectCopySuccess': 'Copied object info to the clipboard',
+      'objectSearchError': "Couldn't open search link",
     },
     'ko': {
       'appTitle': '장면 오버레이 데모',
       'sceneViewerTitle': '장면 뷰어',
       'noSceneLoaded': '아직 장면이 로드되지 않았어요',
+      'objectIdLabel': 'ID: {id}',
+      'objectBoundingBoxTitle': '바운딩 박스',
+      'objectBoundingBoxPosition': '위치: ({x}, {y})',
+      'objectBoundingBoxSize': '크기: {width} × {height}',
+      'objectActionsTitle': '다음 작업',
+      'objectDescription': '{label}로 감지했어요. 더 알아보거나 공유해보세요.',
+      'objectSearchAction': '웹에서 검색',
+      'objectCopyAction': '객체 요약 복사',
+      'objectCopySuccess': '객체 정보를 클립보드에 복사했어요',
+      'objectSearchError': '검색 링크를 열 수 없어요',
     },
   };
 

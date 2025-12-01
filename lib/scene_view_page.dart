@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'image_source_provider.dart';
 import 'label_localizer.dart';
@@ -201,6 +203,15 @@ class _SceneViewPageState extends State<SceneViewPage> {
     DetectedObject object,
     String localizedLabel,
   ) {
+    final sceneState = context.read<SceneState>();
+    sceneState.selectObject(object.id);
+
+    final localizations = AppLocalizations.of(context);
+    final positionX = object.bbox.left.toStringAsFixed(1);
+    final positionY = object.bbox.top.toStringAsFixed(1);
+    final sizeWidth = object.bbox.width.toStringAsFixed(1);
+    final sizeHeight = object.bbox.height.toStringAsFixed(1);
+
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -211,28 +222,150 @@ class _SceneViewPageState extends State<SceneViewPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  localizedLabel,
-                  style: Theme.of(context).textTheme.titleLarge,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        localizedLabel,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: MaterialLocalizations.of(context).closeButtonLabel,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'ID: ${object.id}',
+                  localizations?.objectIdLabel(object.id) ?? 'ID: ${object.id}',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
-                const Text('What is this object? (placeholder)'),
-                const SizedBox(height: 8),
-                const Text('Search for similar items (placeholder)'),
+                Text(
+                  localizations?.objectBoundingBoxTitle ?? 'Bounding box',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  localizations?.objectBoundingBoxPosition(positionX, positionY) ??
+                      'Position: ($positionX, $positionY)',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                Text(
+                  localizations?.objectBoundingBoxSize(sizeWidth, sizeHeight) ??
+                      'Size: $sizeWidth × $sizeHeight',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  localizations?.objectDescription(localizedLabel) ??
+                      'Detected as $localizedLabel. Explore or share more details.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  localizations?.objectActionsTitle ?? 'Next actions',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    FilledButton.icon(
+                      icon: const Icon(Icons.search),
+                      onPressed: () => _openSearch(localizedLabel, object),
+                      label: Text(
+                        localizations?.objectSearchAction ?? 'Search on the web',
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.copy_outlined),
+                      onPressed: () =>
+                          _copyObjectSummary(localizedLabel, object, sceneState),
+                      label: Text(
+                        localizations?.objectCopyAction ?? 'Copy object summary',
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         );
       },
-    );
+    ).whenComplete(() {
+      final objects = sceneState.currentScene?.objects ?? [];
+      final stillExists = objects.any((candidate) => candidate.id == object.id);
+      if (stillExists) {
+        sceneState.selectObject(object.id);
+      }
+    });
+  }
+
+  Future<void> _openSearch(String query, DetectedObject object) async {
+    final url = Uri.https('www.google.com', '/search', {'q': query});
+    final localizations = AppLocalizations.of(context);
+    try {
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        _showError(localizations?.objectSearchError ?? "Couldn't open search link");
+      }
+    } catch (_) {
+      _showError(localizations?.objectSearchError ?? "Couldn't open search link");
+    }
+
+    final sceneState = context.read<SceneState>();
+    final stillExists =
+        sceneState.currentScene?.objects.any((candidate) => candidate.id == object.id) ??
+            false;
+    if (stillExists) {
+      sceneState.selectObject(object.id);
+    }
+  }
+
+  Future<void> _copyObjectSummary(
+    String localizedLabel,
+    DetectedObject object,
+    SceneState sceneState,
+  ) async {
+    final localizations = AppLocalizations.of(context);
+    final positionX = object.bbox.left.toStringAsFixed(1);
+    final positionY = object.bbox.top.toStringAsFixed(1);
+    final sizeWidth = object.bbox.width.toStringAsFixed(1);
+    final sizeHeight = object.bbox.height.toStringAsFixed(1);
+
+    final summary = StringBuffer()
+      ..writeln(localizedLabel)
+      ..writeln(localizations?.objectIdLabel(object.id) ?? 'ID: ${object.id}')
+      ..writeln(localizations?.objectBoundingBoxPosition(positionX, positionY) ??
+          'Position: ($positionX, $positionY)')
+      ..write(localizations?.objectBoundingBoxSize(sizeWidth, sizeHeight) ??
+          'Size: $sizeWidth × $sizeHeight');
+
+    await Clipboard.setData(ClipboardData(text: summary.toString()));
+    if (mounted) {
+      _showSnack(localizations?.objectCopySuccess ?? 'Copied object info to the clipboard');
+    }
+
+    final stillExists =
+        sceneState.currentScene?.objects.any((candidate) => candidate.id == object.id) ??
+            false;
+    if (stillExists) {
+      sceneState.selectObject(object.id);
+    }
   }
 
   void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
