@@ -21,4 +21,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/models/yolo11n.tflite
+    - assets/models/yolo11n-seg.tflite
     - assets/models/labels.txt

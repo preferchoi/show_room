@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'models.dart';
-import 'yolo_service.dart';
+import 'yolo_seg_service.dart';
 import 'image_source_provider.dart';
 
 /// Abstraction between the UI layer and any detection backend (mock or YOLO).
@@ -59,19 +59,15 @@ class MockDetectionRepository implements DetectionRepository {
   }
 }
 
-/// YOLO-backed implementation that delegates to [YoloService].
+/// YOLO-backed implementation that delegates to [YoloSegService].
 ///
 /// Notes:
-/// - YoloService currently contains TODOs for normalization, label parsing,
-///   and segmentation masks. Until those are resolved and validated against the
-///   actual exported model, it is safer to keep using [MockDetectionRepository]
-///   by default.
-/// - Switching to this repository should be controlled by a feature flag or
-///   configuration (see `useMockDetection` in main.dart).
-class YoloDetectionRepository implements DetectionRepository {
-  final YoloService _service;
+/// - Keep [useMockDetection] in main.dart enabled while validating model
+///   assets and runtime performance on target devices.
+class YoloSegDetectionRepository implements DetectionRepository {
+  final YoloSegService _service;
 
-  YoloDetectionRepository(this._service);
+  YoloSegDetectionRepository(this._service);
 
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {

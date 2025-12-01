@@ -47,14 +47,14 @@ class YoloSegService {
   ///
   /// ```yaml
   /// assets:
-  ///   - assets/models/yolov8-seg.tflite
+  ///   - assets/models/yolo11n-seg.tflite
   ///   - assets/models/labels.txt
   /// ```
   Future<void> init() async {
     if (_interpreter != null) return;
 
     // Load interpreter from bundled asset.
-    _interpreter = await Interpreter.fromAsset('models/yolov8-seg.tflite');
+    _interpreter = await Interpreter.fromAsset('models/yolo11n-seg.tflite');
 
     // Read input tensor shape to derive expected image size.
     final inputTensor = _interpreter!.getInputTensor(0);
@@ -84,13 +84,26 @@ class YoloSegService {
     // Typical YOLO-seg exports have:
     // - output 0: detection head => [1, num_predictions, 4 + 1 + num_classes + mask_coeffs]
     // - output 1: mask prototypes => [1, mask_dim, mask_h, mask_w]
-    // TODO: Adjust indices and dimensions to match your specific model.
     final outputs = _interpreter!.getOutputTensors();
-    if (outputs.length >= 2) {
-      final protoShape = outputs[1].shape;
-      // Example: [1, mask_dim, mask_h, mask_w]
-      if (protoShape.length == 4) {
-        _maskCoefficientDim = protoShape[1];
+    if (outputs.isNotEmpty) {
+      final detectionShape = outputs.first.shape;
+      if (detectionShape.length == 3) {
+        final int channels = detectionShape[2];
+        // Estimate number of masks and classes based on prototype dimensions.
+        final int? estimatedMaskDim = outputs.length > 1 && outputs[1].shape.length == 4
+            ? outputs[1].shape[1]
+            : _maskCoefficientDim;
+        _maskCoefficientDim ??= estimatedMaskDim;
+        if (_maskCoefficientDim != null) {
+          final int possibleClasses = channels - 4 - _maskCoefficientDim!;
+          // Some exports include an objectness score in addition to class logits.
+          final int withObjness = possibleClasses - 1;
+          if (_labels.isNotEmpty && (_labels.length == possibleClasses || _labels.length == withObjness)) {
+            _numClasses = _labels.length;
+          } else if (possibleClasses > 0) {
+            _numClasses = possibleClasses > withObjness ? withObjness : possibleClasses;
+          }
+        }
       }
     }
   }
@@ -212,44 +225,60 @@ class YoloSegService {
     int originalWidth,
     int originalHeight,
   ) {
-    // TODO: Update parsing logic to match your YOLO seg output tensor format.
-    // Example assumption: detectionHead => [1, num_predictions, 4 + 1 + num_classes + mask_coeffs]
-    if (detectionHead is! List || detectionHead.isEmpty || detectionHead.first is! List) {
+    if (detectionHead is! List || detectionHead.isEmpty) {
       return [];
     }
 
+    final List predictions =
+        detectionHead.length == 1 && detectionHead.first is List ? detectionHead.first as List : detectionHead;
+
     final detections = <_RawDetection>[];
+    final int maskDim = _maskCoefficientDim ?? 0;
 
-    for (final prediction in detectionHead.first as List) {
+    for (final prediction in predictions) {
       if (prediction is! List) continue;
-      if (prediction.length < 6) continue; // Minimal check: x,y,w,h,objectness,class scores...
+      if (prediction.length < 4) continue;
 
-      // The indices below are model dependent. Replace with actual mapping for your export:
-      // [cx, cy, w, h, obj_conf, class_conf_0 ... class_conf_n, mask_coeffs...]
-      final double objConf = (prediction[4] as num).toDouble();
-      if (objConf < _confidenceThreshold) continue;
+      final values = prediction.map((e) => (e as num).toDouble()).toList();
 
-      // Find best class.
-      int bestClass = 0;
+      final int availableMaskDim = maskDim > 0 ? maskDim : max(0, values.length - 4 - _numClasses);
+      final int maskStart = max(4, values.length - availableMaskDim);
+      final int availableClassSlots = max(0, maskStart - 4);
+
+      double objectness = 1.0;
+      int classStart = 4;
+      int classCount = availableClassSlots;
+
+      if (_numClasses > 0 && availableClassSlots == _numClasses + 1) {
+        // Layout with objectness followed by class logits.
+        objectness = _sigmoid(values[4]);
+        classStart = 5;
+        classCount = _numClasses;
+      } else if (_numClasses > 0 && availableClassSlots >= _numClasses) {
+        classCount = _numClasses;
+      }
+
+      // Find best class using sigmoid-activated logits.
+      int bestClass = -1;
       double bestClassScore = 0;
-      final int classCount = _numClasses > 0 ? _numClasses : max(0, prediction.length - 5);
       for (int i = 0; i < classCount; i++) {
-        final int idx = 5 + i;
-        if (idx >= prediction.length) break;
-        final score = (prediction[idx] as num).toDouble();
-        if (score > bestClassScore) {
-          bestClassScore = score;
+        final int idx = classStart + i;
+        if (idx >= values.length) break;
+        final double prob = _sigmoid(values[idx]);
+        if (prob > bestClassScore) {
+          bestClassScore = prob;
           bestClass = i;
         }
       }
-      final double confidence = objConf * bestClassScore;
-      if (confidence < _confidenceThreshold) continue;
+
+      final double confidence = objectness * bestClassScore;
+      if (confidence < _confidenceThreshold || bestClass == -1) continue;
 
       // Bounding box in input scale (cx, cy, w, h).
-      final double cx = (prediction[0] as num).toDouble();
-      final double cy = (prediction[1] as num).toDouble();
-      final double w = (prediction[2] as num).toDouble();
-      final double h = (prediction[3] as num).toDouble();
+      final double cx = values[0];
+      final double cy = values[1];
+      final double w = values[2];
+      final double h = values[3];
 
       final double xMin = cx - w / 2;
       final double yMin = cy - h / 2;
@@ -271,15 +300,8 @@ class YoloSegService {
       final label = (bestClass < _labels.length) ? _labels[bestClass] : 'class_$bestClass';
 
       List<double>? maskCoefficients;
-      // YOLO-seg usually appends mask coefficients after the class scores.
-      // TODO: Adjust start index and length based on your export. For YOLOv8-seg
-      // it's often at index (5 + num_classes) with length mask_dim.
-      final int coeffStart = 5 + classCount;
-      if (coeffStart < prediction.length) {
-        maskCoefficients = prediction
-            .skip(coeffStart)
-            .map((e) => (e as num).toDouble())
-            .toList();
+      if (maskStart < values.length) {
+        maskCoefficients = values.sublist(maskStart);
       }
 
       detections.add(_RawDetection(
@@ -323,15 +345,6 @@ class YoloSegService {
     required Rect bboxOnInput,
     required Rect bboxOnOriginal,
   }) {
-    // TODO: Adapt this implementation to your YOLO-seg export format.
-    // Typical flow:
-    // 1) maskPrototypes: [1, mask_dim, mask_h, mask_w]
-    // 2) Multiply prototypes by maskCoefficients (length == mask_dim).
-    // 3) Apply sigmoid to obtain per-pixel probabilities.
-    // 4) Optionally crop to bboxOnInput and/or resize to target mask grid.
-    // 5) Threshold (e.g., >0.5) to produce binary mask.
-    // 6) Map the mask grid's bounding box from input space to original space.
-
     if (maskCoefficients.isEmpty) return null;
 
     final proto = _toDoubleCube(maskPrototypes);
@@ -341,30 +354,41 @@ class YoloSegService {
     final int coeffCount = maskCoefficients.length;
     final int effectiveDim = min(maskDim, coeffCount);
     if (effectiveDim == 0) return null;
+
     final int maskHeight = proto.first.length;
     final int maskWidth = proto.first.isNotEmpty ? proto.first.first.length : 0;
     if (maskWidth == 0 || maskHeight == 0) return null;
 
-    // Placeholder composition: generate a dummy mask proportional to bbox area.
-    // Replace with real prototype * coefficient multiplication for production use.
-    final Uint8List binaryMask = Uint8List(maskWidth * maskHeight);
-    // Example pseudocode for real mask blending (commented):
-    // for y in 0..maskHeight-1:
-    //   for x in 0..maskWidth-1:
-    //     double sum = 0;
-    //     for k in 0..maskDim-1:
-    //       sum += proto[k][y][x] * maskCoefficients[k];
-    //     final prob = _sigmoid(sum);
-    //     binaryMask[y * maskWidth + x] = prob > 0.5 ? 1 : 0;
-    // TODO: Uncomment and adapt the above loop when mask dimensions are known.
+    // Convert detection bbox from input resolution to prototype grid resolution.
+    final double scaleX = maskWidth / _inputWidth;
+    final double scaleY = maskHeight / _inputHeight;
+    final int x0 = (bboxOnInput.left * scaleX).floor().clamp(0, maskWidth - 1).toInt();
+    final int y0 = (bboxOnInput.top * scaleY).floor().clamp(0, maskHeight - 1).toInt();
+    final int x1 = (bboxOnInput.right * scaleX).ceil().clamp(x0 + 1, maskWidth).toInt();
+    final int y1 = (bboxOnInput.bottom * scaleY).ceil().clamp(y0 + 1, maskHeight).toInt();
 
-    // Current placeholder: fill with 1s to cover the bbox area.
-    binaryMask.fillRange(0, binaryMask.length, 1);
+    final int cropWidth = x1 - x0;
+    final int cropHeight = y1 - y0;
+    if (cropWidth <= 0 || cropHeight <= 0) return null;
 
-    // Optionally resize/crop mask to a smaller grid for efficient hit-testing.
-    final int targetWidth = min(maskWidth, 64);
-    final int targetHeight = min(maskHeight, 64);
-    final Uint8List resizedMask = _resizeBinaryMask(binaryMask, maskWidth, maskHeight, targetWidth, targetHeight);
+    final Uint8List binaryMask = Uint8List(cropWidth * cropHeight);
+
+    for (int y = y0; y < y1; y++) {
+      for (int x = x0; x < x1; x++) {
+        double sum = 0;
+        for (int k = 0; k < effectiveDim; k++) {
+          sum += proto[k][y][x] * maskCoefficients[k];
+        }
+        final double prob = _sigmoid(sum);
+        final int localIndex = (y - y0) * cropWidth + (x - x0);
+        binaryMask[localIndex] = prob > 0.5 ? 255 : 0;
+      }
+    }
+
+    // Optionally downsample the mask for lighter hit-testing while keeping the same bbox.
+    final int targetWidth = min(cropWidth, 128);
+    final int targetHeight = min(cropHeight, 128);
+    final Uint8List resizedMask = _resizeBinaryMask(binaryMask, cropWidth, cropHeight, targetWidth, targetHeight);
 
     return MaskData(
       width: targetWidth,

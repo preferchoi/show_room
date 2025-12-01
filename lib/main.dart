@@ -8,7 +8,7 @@ import 'detection_repository.dart';
 import 'image_source_provider.dart';
 import 'scene_state.dart';
 import 'scene_view_page.dart';
-import 'yolo_service.dart';
+import 'yolo_seg_service.dart';
 
 // Toggle between the fully offline mock backend and the YOLO-backed backend.
 // Keep this true while YoloService still contains TODOs (normalization,
@@ -19,7 +19,7 @@ const ImageSourceType defaultImageSource = ImageSourceType.sample;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final yoloService = YoloService.instance;
+  final yoloService = YoloSegService.instance;
   if (!useMockDetection) {
     // Only initialize the interpreter when the YOLO-backed flow is enabled.
     await yoloService.init();
@@ -27,7 +27,7 @@ void main() async {
 
   final DetectionRepository repository = useMockDetection
       ? MockDetectionRepository()
-      : YoloDetectionRepository(yoloService);
+      : YoloSegDetectionRepository(yoloService);
 
   runApp(
     MultiProvider(
