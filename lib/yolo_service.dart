@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
+import 'package:meta/meta.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 import 'models.dart';
@@ -43,6 +44,45 @@ class YoloService {
     _modelProvider = provider;
   }
 
+  @visibleForTesting
+  void debugConfigure({
+    required int inputWidth,
+    required int inputHeight,
+    int inputChannels = 3,
+    double? confidenceThreshold,
+    double? iouThreshold,
+    List<String>? labels,
+  }) {
+    _inputWidth = inputWidth;
+    _inputHeight = inputHeight;
+    _inputChannels = inputChannels;
+    _confidenceThreshold = confidenceThreshold ?? _confidenceThreshold;
+    _iouThreshold = iouThreshold ?? _iouThreshold;
+    if (labels != null) {
+      _labels = normalizeLabels(labels.join('\n'));
+    }
+  }
+
+  @visibleForTesting
+  List<DetectedObject> parseDetectionsForTest(
+    List<double> rawOutput,
+    List<int> outputShape,
+    PreprocessResult prep,
+  ) {
+    return _parseDetections(rawOutput, outputShape, prep);
+  }
+
+  /// Normalizes the label file contents by trimming whitespace and removing
+  /// empty lines.
+  @visibleForTesting
+  static List<String> normalizeLabels(String rawLabels) {
+    return rawLabels
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
   /// Loads the TFLite model and labels. Safe to call multiple times; the
   /// interpreter is created only once.
   Future<void> init() async {
@@ -72,7 +112,7 @@ class YoloService {
 
     // Load labels.
     final String rawLabels = await rootBundle.loadString('assets/models/labels.txt');
-    _labels = rawLabels.split('\n').where((e) => e.trim().isNotEmpty).toList();
+    _labels = normalizeLabels(rawLabels);
 
     // init() must be awaited once before calling detect().
   }
@@ -84,7 +124,7 @@ class YoloService {
       throw StateError('YoloService.init() must be called before detect().');
     }
 
-    final _PreprocessResult prep = _preprocess(imageBytes);
+    final PreprocessResult prep = _preprocess(imageBytes);
 
     // Prepare output buffer based on the first output tensor shape.
     final Tensor outputTensor = _interpreter!.getOutputTensor(0);
@@ -110,7 +150,7 @@ class YoloService {
     );
   }
 
-  _PreprocessResult _preprocess(Uint8List imageBytes) {
+  PreprocessResult _preprocess(Uint8List imageBytes) {
     final img.Image? decoded = img.decodeImage(imageBytes);
     if (decoded == null) {
       throw ArgumentError('Unable to decode image bytes');
@@ -163,7 +203,7 @@ class YoloService {
       }
     }
 
-    return _PreprocessResult(
+    return PreprocessResult(
       inputBuffer: inputBuffer,
       originalWidth: originalWidth,
       originalHeight: originalHeight,
@@ -176,26 +216,85 @@ class YoloService {
   List<DetectedObject> _parseDetections(
     List<double> rawOutput,
     List<int> outputShape,
-    _PreprocessResult prep,
+    PreprocessResult prep,
   ) {
-    // The parsing below assumes an output shape like [1, num_predictions, values]
-    // where values = 4 bbox + 1 objectness + num_classes. Adjust as needed for
-    // your YOLO11n export if the layout differs.
-    if (outputShape.length < 3) {
+    // YOLO11 exports typically emit a detection head shaped [1, 8400, 84]
+    // (values last) or [1, 84, 8400] (values first) where values =
+    // [cx, cy, w, h, class_scores...]. Some variants include an objectness
+    // probability between the box coordinates and class scores. The parsing
+    // below adapts to both layouts and validates the label count when labels
+    // are available.
+    if (outputShape.length != 3 || outputShape[0] != 1) {
       throw StateError('Unexpected output shape: $outputShape');
     }
 
-    final bool valuesLast = outputShape[2] <= outputShape[1];
-    final int numPredictions = valuesLast ? outputShape[1] : outputShape[2];
-    final int valuesPerPrediction = valuesLast ? outputShape[2] : outputShape[1];
+    final int dim1 = outputShape[1];
+    final int dim2 = outputShape[2];
+    final layouts = <({int predictions, int values, bool valuesFirst})>[
+      (predictions: dim1, values: dim2, valuesFirst: false),
+      (predictions: dim2, values: dim1, valuesFirst: true),
+    ];
+
+    ({int predictions, int values, bool valuesFirst})? selectedLayout;
+    for (final layout in layouts) {
+      if (_labels.isNotEmpty &&
+          (layout.values == 4 + _labels.length ||
+              layout.values == 5 + _labels.length)) {
+        selectedLayout = layout;
+        break;
+      }
+    }
+
+    selectedLayout ??=
+        layouts.where((layout) => layout.values >= 4).fold<({int predictions, int values, bool valuesFirst})?>(
+              null,
+              (current, layout) =>
+                  current == null || layout.predictions > current.predictions
+                      ? layout
+                      : current,
+            );
+    selectedLayout ??= layouts.first;
+
+    final int numPredictions = selectedLayout.predictions;
+    final int valuesPerPrediction = selectedLayout.values;
+    final bool valuesFirst = selectedLayout.valuesFirst;
+
+    if (numPredictions * valuesPerPrediction > rawOutput.length) {
+      throw StateError(
+        'Output buffer length ${rawOutput.length} is insufficient for shape $outputShape.',
+      );
+    }
 
     double readValue(int predictionIndex, int valueIndex) {
-      if (valuesLast) {
+      if (!valuesFirst) {
         final int baseIndex = predictionIndex * valuesPerPrediction;
         return rawOutput[baseIndex + valueIndex];
       }
       final int baseIndex = valueIndex * numPredictions;
       return rawOutput[baseIndex + predictionIndex];
+    }
+
+    final bool hasObjectnessHint =
+        _labels.isNotEmpty && valuesPerPrediction == 5 + _labels.length;
+    final bool noObjectnessHint =
+        _labels.isNotEmpty && valuesPerPrediction == 4 + _labels.length;
+    bool hasObjectness = hasObjectnessHint;
+    if (!hasObjectnessHint && !noObjectnessHint) {
+      hasObjectness = valuesPerPrediction.isOdd && valuesPerPrediction > 5;
+    }
+    if (noObjectnessHint) {
+      hasObjectness = false;
+    }
+    final int classOffset = hasObjectness ? 5 : 4;
+    final int numClasses = valuesPerPrediction - classOffset;
+
+    if (numClasses <= 0) {
+      throw StateError('Unable to infer class count from output shape: $outputShape');
+    }
+    if (_labels.isNotEmpty && _labels.length != numClasses) {
+      throw StateError(
+        'Label count (${_labels.length}) does not match model classes ($numClasses).',
+      );
     }
 
     final List<_RawDetection> candidates = [];
@@ -204,22 +303,19 @@ class YoloService {
       final double yCenter = readValue(i, 1);
       final double width = readValue(i, 2);
       final double height = readValue(i, 3);
-      final double objectness = readValue(i, 4);
 
-      // Class scores start at index 5.
-      final int numClasses = valuesPerPrediction - 5;
-      if (numClasses <= 0) continue;
+      final double objectness = hasObjectness ? readValue(i, 4) : 1.0;
       double bestClassScore = -double.infinity;
       int bestClassIndex = -1;
       for (int c = 0; c < numClasses; c++) {
-        final double classScore = readValue(i, 5 + c);
+        final double classScore = readValue(i, classOffset + c);
         if (classScore > bestClassScore) {
           bestClassScore = classScore;
           bestClassIndex = c;
         }
       }
 
-      final double confidence = objectness * bestClassScore;
+      final double confidence = max(0.0, objectness) * max(0.0, bestClassScore);
       if (confidence < _confidenceThreshold) continue;
 
       // YOLO exports return center-x/y and width/height relative to the
@@ -315,8 +411,8 @@ class YoloService {
   }
 }
 
-class _PreprocessResult {
-  _PreprocessResult({
+class PreprocessResult {
+  const PreprocessResult({
     required this.inputBuffer,
     required this.originalWidth,
     required this.originalHeight,
