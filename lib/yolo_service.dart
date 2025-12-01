@@ -104,8 +104,14 @@ class YoloService {
     // Optionally inspect output tensor shapes to understand your model layout.
     // For YOLO-style detectors this is often [1, num_predictions, values_per_pred].
     // TODO: Confirm the actual shape for your YOLO11n TFLite export.
-    for (int i = 0; i < _interpreter!.getOutputTensorCount(); i++) {
-      final shape = _interpreter!.getOutputTensor(i).shape;
+    final interpreter = _interpreter;
+    if (interpreter == null) {
+      throw StateError('Interpreter unexpectedly null after initialization.');
+    }
+
+    final outputTensors = interpreter.getOutputTensors();
+    for (int i = 0; i < outputTensors.length; i++) {
+      final shape = outputTensors[i].shape;
       // ignore: avoid_print
       print('Output tensor $i shape: $shape');
     }
