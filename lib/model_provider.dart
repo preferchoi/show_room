@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 /// Abstraction for supplying a TFLite interpreter. Today we only support an
@@ -11,6 +14,24 @@ class AssetModelProvider implements ModelProvider {
   @override
   Future<Interpreter> loadInterpreter() async {
     // The asset path must be kept in sync with pubspec.yaml.
-    return Interpreter.fromAsset('models/yolo11n.tflite');
+    const String assetPath = 'assets/models/yolo11n.tflite';
+
+    final ByteData modelBytes = await rootBundle.load(assetPath);
+    final Uint8List buffer = modelBytes.buffer.asUint8List();
+
+    // A guard to avoid confusing runtime errors if the asset is replaced with
+    // a placeholder text file.
+    const String placeholderSignature = 'Placeholder model file.';
+    final String asciiPrefix = String.fromCharCodes(
+      buffer.take(placeholderSignature.length),
+    );
+    if (asciiPrefix == placeholderSignature) {
+      throw StateError(
+        'A placeholder model file was found at $assetPath. Replace it with the '
+        'YOLO11n TensorFlow Lite binary before enabling on-device detection.',
+      );
+    }
+
+    return Interpreter.fromBuffer(buffer);
   }
 }
