@@ -14,6 +14,7 @@ import 'yolo_service.dart';
 // Keep this true while YoloService still contains TODOs (normalization,
 // parsing, labels, etc.) so the UI can run safely end-to-end.
 const bool useMockDetection = true;
+const ImageSourceType defaultImageSource = ImageSourceType.sample;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,18 +68,26 @@ class MyApp extends StatelessWidget {
 /// sample image source so the app can launch with no runtime permissions or
 /// model files when `useMockDetection` is true.
 class SceneBootstrapper extends StatefulWidget {
-  const SceneBootstrapper({super.key});
+  const SceneBootstrapper({
+    super.key,
+    this.defaultSourceType = defaultImageSource,
+    this.imageSourceProvider,
+  });
+
+  final ImageSourceType defaultSourceType;
+  final ImageSourceProvider? imageSourceProvider;
 
   @override
   State<SceneBootstrapper> createState() => _SceneBootstrapperState();
 }
 
 class _SceneBootstrapperState extends State<SceneBootstrapper> {
-  final ImageSourceProvider _imageSourceProvider = SampleImageSourceProvider();
+  late final ImageSourceProvider _imageSourceProvider;
 
   @override
   void initState() {
     super.initState();
+    _imageSourceProvider = widget.imageSourceProvider ?? DefaultImageSourceProvider();
     // Defer the load to the first frame so the provider tree is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadInitialScene());
@@ -87,15 +96,22 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
 
   Future<void> _loadInitialScene() async {
     try {
-      // Extension point: swap [ImageSourceType.sample] with gallery/camera once
-      // those sources are implemented. The detection backend remains untouched.
-      final Uint8List bytes = await _imageSourceProvider.loadImage(ImageSourceType.sample);
+      final Uint8List bytes =
+          await _imageSourceProvider.loadImage(widget.defaultSourceType);
       await context.read<SceneState>().loadScene(bytes);
+    } on ImageSourceException catch (err) {
+      _showError(err.message);
     } catch (err) {
-      // For now, surface basic errors. This keeps the mock flow resilient even
-      // while future camera/gallery implementations are stubbed out.
       debugPrint('Failed to load initial scene: $err');
+      _showError('이미지를 불러오지 못했어요. 다시 시도해주세요.');
     }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
