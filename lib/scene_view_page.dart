@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'label_localizer.dart';
+import 'l10n/app_localizations.dart';
 import 'models.dart';
 import 'object_button.dart';
 import 'scene_state.dart';
@@ -14,19 +15,24 @@ class SceneViewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     final sceneState = context.watch<SceneState>();
     final scene = sceneState.currentScene;
 
     if (scene == null) {
-      return const Scaffold(
-        body: Center(child: Text('No scene loaded yet')),
+      return Scaffold(
+        body: Center(
+          child: Text(localizations?.noSceneLoaded ?? 'No scene loaded yet'),
+        ),
       );
     }
 
     final labelLocalizer = LabelLocalizer();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scene viewer')),
+      appBar: AppBar(
+        title: Text(localizations?.sceneViewerTitle ?? 'Scene viewer'),
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           // Calculate how the original image will be scaled when fitted inside
