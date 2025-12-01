@@ -10,7 +10,7 @@ import 'image_source_provider.dart';
 import 'l10n/app_localizations.dart';
 import 'scene_state.dart';
 import 'scene_view_page.dart';
-import 'yolo_seg_service.dart';
+import 'yolo_service.dart';
 
 // Toggle between the fully offline mock backend and the YOLO-backed backend.
 // Keep this true while YoloService still contains TODOs (normalization,
@@ -22,7 +22,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final DetectionRepository repository = useMockDetection
       ? MockDetectionRepository()
-      : YoloSegDetectionRepository(YoloSegService.instance);
+      : YoloDetectionRepository(YoloService.instance);
 
   runApp(
     MultiProvider(
@@ -115,7 +115,7 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
     });
 
     try {
-      await YoloSegService.instance.init();
+      await YoloService.instance.init();
       if (!mounted) return;
       setState(() {
         _initStatus = _InitStatus.success;
