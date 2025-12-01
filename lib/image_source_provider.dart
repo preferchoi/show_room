@@ -41,7 +41,7 @@ class DefaultImageSourceProvider implements ImageSourceProvider {
       case ImageSourceType.sample:
         return _loadSample();
       case ImageSourceType.gallery:
-        await _ensurePermission(_galleryPermission);
+        await _ensureGalleryPermission();
         return _pickImage(ImageSource.gallery);
       case ImageSourceType.camera:
         await _ensurePermission(Permission.camera);
@@ -69,23 +69,65 @@ class DefaultImageSourceProvider implements ImageSourceProvider {
     return bytes;
   }
 
-  Permission get _galleryPermission {
-    if (Platform.isIOS) return Permission.photos;
-    if (Platform.isAndroid) return Permission.storage;
-    return Permission.photos;
+  List<Permission> get _galleryPermissions {
+    if (Platform.isIOS) return <Permission>[Permission.photos];
+    if (Platform.isAndroid) {
+      return <Permission>[Permission.photos, Permission.storage];
+    }
+    return <Permission>[Permission.photos];
   }
 
   Future<void> _ensurePermission(Permission permission) async {
-    final status = await permission.request();
+    final status = await _requestPermission(permission);
+    if (_isGranted(status)) return;
+
+    _throwPermissionDenied(status);
+  }
+
+  Future<void> _ensureGalleryPermission() async {
+    for (final Permission permission in _galleryPermissions) {
+      final status = await _requestPermission(permission);
+      if (_isGranted(status)) return;
+
+      if (_isTerminalDenial(status)) {
+        _throwPermissionDenied(status);
+      }
+    }
+
+    _throwPermissionDenied(PermissionStatus.denied);
+  }
+
+  Future<PermissionStatus> _requestPermission(Permission permission) {
+    return permission.request();
+  }
+
+  bool _isGranted(PermissionStatus status) {
+    return status == PermissionStatus.granted || status == PermissionStatus.limited;
+  }
+
+  bool _isTerminalDenial(PermissionStatus status) {
+    return status == PermissionStatus.permanentlyDenied || status == PermissionStatus.restricted;
+  }
+
+  Never _throwPermissionDenied(PermissionStatus status) {
     switch (status) {
       case PermissionStatus.granted:
       case PermissionStatus.limited:
-        return;
+        throw StateError('Permission unexpectedly granted');
       case PermissionStatus.denied:
+        throw const ImageSourceException(
+          '권한이 거부되어 이미지를 불러올 수 없어요. 설정에서 권한을 허용한 뒤 다시 시도해주세요.',
+        );
       case PermissionStatus.restricted:
-        throw const ImageSourceException('권한이 거부되어 이미지를 불러올 수 없어요.');
       case PermissionStatus.permanentlyDenied:
-        throw const ImageSourceException('권한이 영구적으로 거부되었어요. 설정에서 허용해주세요.');
+        throw const ImageSourceException(
+          '권한이 제한되어 이미지를 불러올 수 없어요. 설정에서 사진 접근을 허용해주세요.',
+        );
+      case PermissionStatus.provisional:
+        // Not expected for these permissions, but keep for exhaustive switches.
+        throw const ImageSourceException(
+          '권한을 확인할 수 없어요. 설정에서 사진 접근을 허용한 뒤 다시 시도해주세요.',
+        );
     }
   }
 }
