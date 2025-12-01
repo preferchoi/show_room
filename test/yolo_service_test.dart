@@ -41,7 +41,7 @@ void main() {
       0.05,
     ];
 
-    const prep = PreprocessResult(
+    final prep = PreprocessResult(
       inputBuffer: Float32List(0),
       originalWidth: 640,
       originalHeight: 640,
@@ -83,7 +83,7 @@ void main() {
       4, // class 1 logit -> ~0.982 prob
     ];
 
-    const prep = PreprocessResult(
+    final prep = PreprocessResult(
       inputBuffer: Float32List(0),
       originalWidth: 400,
       originalHeight: 400,
@@ -134,7 +134,7 @@ void main() {
       -2,
     ];
 
-    const prep = PreprocessResult(
+    final prep = PreprocessResult(
       inputBuffer: Float32List(0),
       originalWidth: 640,
       originalHeight: 640,
