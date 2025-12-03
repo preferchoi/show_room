@@ -16,7 +16,8 @@ import 'yolo_service.dart';
 // Keep this true while YoloService still contains TODOs (normalization,
 // parsing, labels, etc.) so the UI can run safely end-to-end.
 const bool useMockDetection = true;
-const ImageSourceType defaultImageSource = ImageSourceType.sample;
+const ImageSourceType defaultImageSource = ImageSourceType.camera;
+const Set<String> defaultTargetLabels = <String>{};
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,10 +76,12 @@ class SceneBootstrapper extends StatefulWidget {
     super.key,
     this.defaultSourceType = defaultImageSource,
     this.imageSourceProvider,
+    this.initialTargetLabels = defaultTargetLabels,
   });
 
   final ImageSourceType defaultSourceType;
   final ImageSourceProvider? imageSourceProvider;
+  final Set<String> initialTargetLabels;
 
   @override
   State<SceneBootstrapper> createState() => _SceneBootstrapperState();
@@ -95,6 +98,7 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
     _imageSourceProvider = widget.imageSourceProvider ?? DefaultImageSourceProvider();
     // Defer the load to the first frame so the provider tree is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SceneState>().setTargetLabels(widget.initialTargetLabels);
       unawaited(_bootstrap());
     });
   }
@@ -139,9 +143,24 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
       await context.read<SceneState>().loadScene(bytes);
     } on ImageSourceException catch (err) {
       _showError(err.message);
+      await _loadFallbackSample();
     } catch (err) {
       debugPrint('Failed to load initial scene: $err');
       _showError('이미지를 불러오지 못했어요. 다시 시도해주세요.');
+      await _loadFallbackSample();
+    }
+  }
+
+  Future<void> _loadFallbackSample() async {
+    if (widget.defaultSourceType == ImageSourceType.sample) return;
+    try {
+      final Uint8List sampleBytes =
+          await _imageSourceProvider.loadImage(ImageSourceType.sample);
+      await context.read<SceneState>().loadScene(sampleBytes);
+    } on ImageSourceException catch (err) {
+      _showError(err.message);
+    } catch (err) {
+      debugPrint('Failed to load fallback sample: $err');
     }
   }
 

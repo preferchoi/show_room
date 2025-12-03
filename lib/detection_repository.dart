@@ -6,18 +6,46 @@ import 'models.dart';
 import 'yolo_service.dart';
 import 'image_source_provider.dart';
 
+/// Describes a single mock detection entry that can be supplied to
+/// [MockDetectionRepository] to customize which fake objects should be returned.
+class MockDetectionDefinition {
+  const MockDetectionDefinition({
+    required this.id,
+    required this.label,
+    required this.bbox,
+  });
+
+  final String id;
+  final String label;
+  final Rect bbox;
+}
+
 /// Abstraction between the UI layer and any detection backend (mock or YOLO).
 abstract class DetectionRepository {
-  Future<SceneDetectionResult> detect(Uint8List imageBytes);
+  Future<SceneDetectionResult> detect(
+    Uint8List imageBytes, {
+    Set<String>? targetLabels,
+  });
 }
 
 /// Mock implementation that always returns a bundled sample image and a small
 /// set of hardcoded bounding boxes. This keeps the UI working end-to-end
 /// without relying on a real TFLite model or device-specific hardware.
 class MockDetectionRepository implements DetectionRepository {
-  MockDetectionRepository();
+  MockDetectionRepository({List<MockDetectionDefinition>? mockObjects})
+      : _mockObjects = mockObjects
+              ?.map(
+                (mock) => _SampleObject(
+                  id: mock.id,
+                  label: mock.label,
+                  bbox: mock.bbox,
+                ),
+              )
+              .toList(growable: false) ??
+          _sampleObjects;
 
   Uint8List? _cachedBytes;
+  final List<_SampleObject> _mockObjects;
 
   Future<_ImageSize?> _decodeImageSize(Uint8List bytes) async {
     try {
@@ -38,7 +66,10 @@ class MockDetectionRepository implements DetectionRepository {
   }
 
   @override
-  Future<SceneDetectionResult> detect(Uint8List imageBytes) async {
+  Future<SceneDetectionResult> detect(
+    Uint8List imageBytes, {
+    Set<String>? targetLabels,
+  }) async {
     final Uint8List sampleBytes = await _loadSampleBytes();
     final Uint8List sceneBytes = imageBytes.isNotEmpty ? imageBytes : sampleBytes;
     final _ImageSize imageSize =
@@ -47,7 +78,11 @@ class MockDetectionRepository implements DetectionRepository {
     final double scaleX = imageSize.width / sampleImageWidth;
     final double scaleY = imageSize.height / sampleImageHeight;
 
-    final List<DetectedObject> objects = _sampleObjects
+    final List<_SampleObject> objectsToUse = targetLabels == null || targetLabels.isEmpty
+        ? _mockObjects
+        : _mockObjects.where((obj) => targetLabels.contains(obj.label)).toList(growable: false);
+
+    final List<DetectedObject> objects = objectsToUse
         .map(
           (obj) => obj.toDetected(
             scaleX: scaleX,
@@ -129,7 +164,10 @@ class YoloDetectionRepository implements DetectionRepository {
   YoloDetectionRepository(this._service);
 
   @override
-  Future<SceneDetectionResult> detect(Uint8List imageBytes) async {
-    return _service.detect(imageBytes);
+  Future<SceneDetectionResult> detect(
+    Uint8List imageBytes, {
+    Set<String>? targetLabels,
+  }) async {
+    return _service.detect(imageBytes, targetLabels: targetLabels);
   }
 }
