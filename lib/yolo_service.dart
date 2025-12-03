@@ -67,9 +67,10 @@ class YoloService {
   List<DetectedObject> parseDetectionsForTest(
     List<double> rawOutput,
     List<int> outputShape,
-    PreprocessResult prep,
-  ) {
-    return _parseDetections(rawOutput, outputShape, prep);
+    PreprocessResult prep, {
+    Set<String>? targetLabels,
+  }) {
+    return _parseDetections(rawOutput, outputShape, prep, targetLabels);
   }
 
   /// Normalizes the label file contents by trimming whitespace and removing
@@ -125,7 +126,10 @@ class YoloService {
 
   /// Runs detection on a single image and returns bounding boxes in the
   /// original image coordinate space.
-  Future<SceneDetectionResult> detect(Uint8List imageBytes) async {
+  Future<SceneDetectionResult> detect(
+    Uint8List imageBytes, {
+    Set<String>? targetLabels,
+  }) async {
     if (_interpreter == null) {
       throw StateError('YoloService.init() must be called before detect().');
     }
@@ -146,6 +150,7 @@ class YoloService {
       outputBuffer,
       outputShape,
       prep,
+      targetLabels,
     );
 
     return SceneDetectionResult(
@@ -224,6 +229,7 @@ class YoloService {
     List<double> rawOutput,
     List<int> outputShape,
     PreprocessResult prep,
+    Set<String>? targetLabels,
   ) {
     // YOLO11 exports typically emit a detection head shaped [1, 8400, 84]
     // (values last) or [1, 84, 8400] (values first) where values =
@@ -356,6 +362,10 @@ class YoloService {
           (bestClassIndex >= 0 && bestClassIndex < _labels.length)
               ? _labels[bestClassIndex]
               : 'class_$bestClassIndex';
+
+      if (targetLabels != null && targetLabels.isNotEmpty && !targetLabels.contains(label)) {
+        continue;
+      }
 
       candidates.add(
         _RawDetection(
