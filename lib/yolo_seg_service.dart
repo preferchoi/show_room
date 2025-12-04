@@ -400,7 +400,7 @@ class YoloSegService {
     final first = tensor.first;
     if (first is List && first.isNotEmpty && first.first is List) {
       // Shape could be [batch, mask_dim, mask_h, mask_w]; drop batch dimension if present.
-      final List source = tensor.length == 1 ? tensor.first as List : tensor as List;
+      final List source = tensor.length == 1 ? first : tensor;
       return source
           .map<List<List<double>>>((dim) =>
               (dim as List).map<List<double>>((row) => (row as List).map((v) => (v as num).toDouble()).toList()).toList())
