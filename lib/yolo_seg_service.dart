@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
@@ -429,7 +428,7 @@ class YoloSegService {
     for (int y = 0; y < resized.height; y++) {
       for (int x = 0; x < resized.width; x++) {
         final img.Pixel pixel = resized.getPixel(x, y);
-        luminance[idx++] = pixel.luminance;
+        luminance[idx++] = pixel.luminance.toInt();
       }
     }
     return luminance;
