@@ -168,13 +168,10 @@ class YoloSegService {
     int idx = 0;
     for (int y = 0; y < _inputHeight; y++) {
       for (int x = 0; x < _inputWidth; x++) {
-        final color = _asColorInt(resized.getPixel(x, y));
-        final r = _getRed(color) / 255.0;
-        final g = _getGreen(color) / 255.0;
-        final b = _getBlue(color) / 255.0;
-        inputBuffer[idx++] = r;
-        inputBuffer[idx++] = g;
-        inputBuffer[idx++] = b;
+        final img.Pixel pixel = resized.getPixel(x, y);
+        inputBuffer[idx++] = pixel.r / 255.0;
+        inputBuffer[idx++] = pixel.g / 255.0;
+        inputBuffer[idx++] = pixel.b / 255.0;
       }
     }
 
@@ -186,18 +183,6 @@ class YoloSegService {
       originalWidth: originalWidth,
       originalHeight: originalHeight,
     );
-  }
-
-  int _getRed(int color) => img.getRed(color);
-
-  int _getGreen(int color) => img.getGreen(color);
-
-  int _getBlue(int color) => img.getBlue(color);
-
-  int _asColorInt(Object pixel) {
-    if (pixel is int) return pixel;
-    if (pixel is img.Pixel) return pixel.toUint32();
-    throw ArgumentError('Unsupported pixel type: ${pixel.runtimeType}');
   }
 
   /// Reshapes a flat Float32List into a nested List structure matching [shape].
@@ -443,8 +428,8 @@ class YoloSegService {
     int idx = 0;
     for (int y = 0; y < resized.height; y++) {
       for (int x = 0; x < resized.width; x++) {
-        final pixel = resized.getPixel(x, y);
-        luminance[idx++] = img.getLuminance(_asColorInt(pixel));
+        final img.Pixel pixel = resized.getPixel(x, y);
+        luminance[idx++] = pixel.luminance;
       }
     }
     return luminance;
