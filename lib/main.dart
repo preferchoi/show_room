@@ -6,7 +6,6 @@ import 'app_config.dart';
 import 'detection_repository.dart';
 import 'l10n/app_localizations.dart';
 import 'landing_page.dart';
-import 'scene_bootstrapper.dart';
 import 'scene_state.dart';
 import 'yolo_service.dart';
 
