@@ -53,6 +53,7 @@ class MyApp extends StatelessWidget {
             ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark),
         useMaterial3: true,
       ),
+      // LandingPage handles navigation to SceneBootstrapper internally.
       home: const LandingPage(),
     );
   }
