@@ -167,7 +167,7 @@ class YoloSegService {
     int idx = 0;
     for (int y = 0; y < _inputHeight; y++) {
       for (int x = 0; x < _inputWidth; x++) {
-        final pixel = resized.getPixel(x, y);
+        final img.Pixel pixel = resized.getPixel(x, y);
         final r = _getRed(pixel) / 255.0;
         final g = _getGreen(pixel) / 255.0;
         final b = _getBlue(pixel) / 255.0;
@@ -409,7 +409,7 @@ class YoloSegService {
     final first = tensor.first;
     if (first is List && first.isNotEmpty && first.first is List) {
       // Shape could be [batch, mask_dim, mask_h, mask_w]; drop batch dimension if present.
-      final Iterable<dynamic> source = tensor.length == 1 ? first as Iterable<dynamic> : tensor;
+      final Iterable<dynamic> source = tensor.length == 1 ? first : tensor;
 
       final cube = <List<List<double>>>[];
       for (final dim in source) {
@@ -445,7 +445,7 @@ class YoloSegService {
     int idx = 0;
     for (int y = 0; y < resized.height; y++) {
       for (int x = 0; x < resized.width; x++) {
-        final pixel = resized.getPixel(x, y);
+        final img.Pixel pixel = resized.getPixel(x, y);
         final int luminanceValue = img.getLuminanceRgb(
           _getRed(pixel),
           _getGreen(pixel),
