@@ -26,8 +26,13 @@ class LandingPage extends StatelessWidget {
   }
 
   String get _logoSvg {
-    final fillColor =
-        '#${logoColor.red.toRadixString(16).padLeft(2, '0')}${logoColor.green.toRadixString(16).padLeft(2, '0')}${logoColor.blue.toRadixString(16).padLeft(2, '0')}';
+    final red = (logoColor.red * 255).round().clamp(0, 255).toInt();
+    final green = (logoColor.green * 255).round().clamp(0, 255).toInt();
+    final blue = (logoColor.blue * 255).round().clamp(0, 255).toInt();
+    final fillColor = '#'
+        '${red.toRadixString(16).padLeft(2, '0')}'
+        '${green.toRadixString(16).padLeft(2, '0')}'
+        '${blue.toRadixString(16).padLeft(2, '0')}';
     return '''
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
   <circle cx="12" cy="12" r="10" fill="$fillColor" />
