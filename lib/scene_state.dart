@@ -9,6 +9,7 @@ class SceneState extends ChangeNotifier {
 
   SceneDetectionResult? currentScene;
   String? selectedObjectId;
+  final List<DetectedObject> detectionHistory = [];
 
   SceneState(this._repository);
 
@@ -17,6 +18,7 @@ class SceneState extends ChangeNotifier {
   /// from a mock backend or a real YOLO model.
   Future<void> loadScene(Uint8List imageBytes) async {
     final result = await _repository.detect(imageBytes);
+    detectionHistory.addAll(result.objects);
     currentScene = result;
     selectedObjectId = null;
     notifyListeners();
