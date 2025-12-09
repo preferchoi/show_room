@@ -12,9 +12,9 @@ class LandingPage extends StatelessWidget {
   static const Color logoColor = Color(0xFFFF9BC2);
 
   String get _logoSvg {
-    final red = ((logoColor.value >> 16) & 0xFF).toRadixString(16).padLeft(2, '0');
-    final green = ((logoColor.value >> 8) & 0xFF).toRadixString(16).padLeft(2, '0');
-    final blue = (logoColor.value & 0xFF).toRadixString(16).padLeft(2, '0');
+    final red = logoColor.red.toRadixString(16).padLeft(2, '0');
+    final green = logoColor.green.toRadixString(16).padLeft(2, '0');
+    final blue = logoColor.blue.toRadixString(16).padLeft(2, '0');
     return '<svg width="120" height="120" xmlns="http://www.w3.org/2000/svg">'
         '<rect x="10" y="10" width="100" height="100" rx="16" '
         'fill="#$red$green$blue" />'
