@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
-
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
@@ -188,11 +187,11 @@ class YoloSegService {
     );
   }
 
-  int _getRed(int color) => (color >> 16) & 0xFF;
+  int _getRed(img.Pixel pixel) => pixel.r.toInt();
 
-  int _getGreen(int color) => (color >> 8) & 0xFF;
+  int _getGreen(img.Pixel pixel) => pixel.g.toInt();
 
-  int _getBlue(int color) => color & 0xFF;
+  int _getBlue(img.Pixel pixel) => pixel.b.toInt();
 
   /// Reshapes a flat Float32List into a nested List structure matching [shape].
   /// This is required because the TFLite interpreter expects properly nested
@@ -442,7 +441,7 @@ class YoloSegService {
           _getRed(pixel),
           _getGreen(pixel),
           _getBlue(pixel),
-        );
+        ).toInt();
       }
     }
     return luminance;
