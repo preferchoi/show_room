@@ -9,6 +9,9 @@ import 'landing_page.dart';
 import 'scene_state.dart';
 import 'yolo_service.dart';
 
+// Navigation to SceneBootstrapper is handled from LandingPage; keep the
+// entrypoint focused on the dependencies it directly uses.
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final DetectionRepository repository = useMockDetection
