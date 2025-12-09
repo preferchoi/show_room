@@ -4,7 +4,7 @@
 
 // import 'package:show_room/yolo_service.dart';
 
-// void main() {
+void main() {
 //   test('normalizeLabels trims whitespace and removes empty entries', () {
 //     const rawLabels = ' person\ncar\n\n dog  \n';
 //     final normalized = YoloService.normalizeLabels(rawLabels);
@@ -154,4 +154,4 @@
 //     expect(detection.bbox.right, closeTo(370, 1e-3));
 //     expect(detection.bbox.bottom, closeTo(345, 1e-3));
 //   });
-// }
+}
