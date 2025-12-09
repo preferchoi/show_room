@@ -12,10 +12,14 @@ class LandingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final logoSvg = _logoSvg;
     return Scaffold(
+      backgroundColor: Colors.white.withValues(alpha: 0.6 / 0.7),
       body: Center(
         child: Text(
           logoSvg,
           textAlign: TextAlign.center,
+          style: TextStyle(
+            color: logoColor.withValues(alpha: 0.25),
+          ),
         ),
       ),
     );
