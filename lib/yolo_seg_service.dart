@@ -409,11 +409,20 @@ class YoloSegService {
     final first = tensor.first;
     if (first is List && first.isNotEmpty && first.first is List) {
       // Shape could be [batch, mask_dim, mask_h, mask_w]; drop batch dimension if present.
-      final List source = tensor.length == 1 ? tensor.first as List : tensor as List;
-      return source
-          .map<List<List<double>>>((dim) =>
-              (dim as List).map<List<double>>((row) => (row as List).map((v) => (v as num).toDouble()).toList()).toList())
-          .toList();
+      final Iterable<dynamic> source = tensor.length == 1 ? first as Iterable<dynamic> : tensor;
+
+      final cube = <List<List<double>>>[];
+      for (final dim in source) {
+        if (dim is! List) return null;
+        final rows = <List<double>>[];
+        for (final row in dim) {
+          if (row is! List) return null;
+          rows.add(row.map((v) => (v as num).toDouble()).toList());
+        }
+        cube.add(rows);
+      }
+
+      return cube;
     }
     return null;
   }
@@ -437,11 +446,12 @@ class YoloSegService {
     for (int y = 0; y < resized.height; y++) {
       for (int x = 0; x < resized.width; x++) {
         final pixel = resized.getPixel(x, y);
-        luminance[idx++] = img.getLuminanceRgb(
+        final int luminanceValue = img.getLuminanceRgb(
           _getRed(pixel),
           _getGreen(pixel),
           _getBlue(pixel),
         ).toInt();
+        luminance[idx++] = luminanceValue;
       }
     }
     return luminance;
