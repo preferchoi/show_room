@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/painting.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -168,10 +168,10 @@ class YoloSegService {
     int idx = 0;
     for (int y = 0; y < _inputHeight; y++) {
       for (int x = 0; x < _inputWidth; x++) {
-        final pixel = resized.getPixel(x, y);
-        final r = _getRed(pixel) / 255.0;
-        final g = _getGreen(pixel) / 255.0;
-        final b = _getBlue(pixel) / 255.0;
+        final img.Pixel pixel = resized.getPixel(x, y);
+        final double r = _getRed(pixel) / 255.0;
+        final double g = _getGreen(pixel) / 255.0;
+        final double b = _getBlue(pixel) / 255.0;
         inputBuffer[idx++] = r;
         inputBuffer[idx++] = g;
         inputBuffer[idx++] = b;
@@ -188,11 +188,11 @@ class YoloSegService {
     );
   }
 
-  int _getRed(int color) => (color >> 16) & 0xFF;
+  int _getRed(img.Pixel color) => color.r;
 
-  int _getGreen(int color) => (color >> 8) & 0xFF;
+  int _getGreen(img.Pixel color) => color.g;
 
-  int _getBlue(int color) => color & 0xFF;
+  int _getBlue(img.Pixel color) => color.b;
 
   /// Reshapes a flat Float32List into a nested List structure matching [shape].
   /// This is required because the TFLite interpreter expects properly nested
@@ -437,7 +437,7 @@ class YoloSegService {
     int idx = 0;
     for (int y = 0; y < resized.height; y++) {
       for (int x = 0; x < resized.width; x++) {
-        final pixel = resized.getPixel(x, y);
+        final img.Pixel pixel = resized.getPixel(x, y);
         luminance[idx++] = img.getLuminanceRgb(
           _getRed(pixel),
           _getGreen(pixel),
