@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:provider/provider.dart';
 
-import 'scene_bootstrapper.dart';
-import 'scene_state.dart';
+import '../../history/presentation/history_screen.dart';
+import '../application/scene_bootstrapper.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -12,12 +11,6 @@ class LandingPage extends StatelessWidget {
   static const Color logoColor = Color(0xFFFF9BC2);
 
   String get _logoSvg {
-    // final red =
-    //     (logoColor.red * 255).round().clamp(0, 255).toInt().toRadixString(16).padLeft(2, '0');
-    // final green =
-    //     (logoColor.green * 255).round().clamp(0, 255).toInt().toRadixString(16).padLeft(2, '0');
-    // final blue =
-    //     (logoColor.blue * 255).round().clamp(0, 255).toInt().toRadixString(16).padLeft(2, '0');
     return '<svg width="120" height="120" xmlns="http://www.w3.org/2000/svg">'
         '<rect x="10" y="10" width="100" height="100" rx="16" '
         'fill="#ff9bc2" />'
@@ -76,7 +69,7 @@ class LandingPage extends StatelessWidget {
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => const _DetectionHistoryPage(),
+                              builder: (_) => const HistoryScreen(),
                             ),
                           );
                         },
@@ -106,47 +99,6 @@ class LandingPage extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DetectionHistoryPage extends StatelessWidget {
-  const _DetectionHistoryPage();
-
-  @override
-  Widget build(BuildContext context) {
-    final history = context.watch<SceneState>().detectionHistory;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('검출 기록'),
-      ),
-      body: history.isEmpty
-          ? const Center(child: Text('아직 감지된 객체가 없어요.'))
-          : ListView.separated(
-              itemCount: history.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final object = history[index];
-                final bbox = object.bbox;
-                final initial =
-                    object.label.isNotEmpty ? object.label[0].toUpperCase() : '?';
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: LandingPage.logoColor.withValues(alpha: 0.25),
-                    child: Text(
-                      initial,
-                      style: const TextStyle(color: Colors.black),
-                    ),
-                  ),
-                  title: Text(object.label),
-                  subtitle: Text(
-                    '(${bbox.left.toStringAsFixed(1)}, ${bbox.top.toStringAsFixed(1)}) · '
-                    '${bbox.width.toStringAsFixed(1)}×${bbox.height.toStringAsFixed(1)}',
-                  ),
-                );
-              },
-            ),
     );
   }
 }

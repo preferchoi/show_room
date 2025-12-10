@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
-import 'app_config.dart';
-import 'detection_repository.dart';
+import 'core/config/app_config.dart';
+import 'core/state/app_state.dart';
+import 'core/theme/app_theme.dart';
+import 'features/camera/presentation/landing_page.dart';
+import 'features/detection/infrastructure/detection_repository.dart';
+import 'features/detection/infrastructure/yolo_service.dart';
 import 'l10n/app_localizations.dart';
-import 'landing_page.dart';
-import 'scene_state.dart';
-import 'yolo_service.dart';
-
-// Navigation to SceneBootstrapper is handled from LandingPage; keep the
-// entrypoint focused on the dependencies it directly uses.
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,7 +20,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => SceneState(repository),
+          create: (_) => AppState(repository),
         ),
       ],
       child: const MyApp(),
@@ -47,17 +45,9 @@ class MyApp extends StatelessWidget {
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       themeMode: ThemeMode.system,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme:
-            ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       home: const LandingPage(),
     );
   }
 }
-

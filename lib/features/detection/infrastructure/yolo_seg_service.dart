@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
-import 'models.dart';
+import '../domain/detection_result.dart';
 
 /// A lightweight YOLO segmentation service using tflite_flutter.
 ///

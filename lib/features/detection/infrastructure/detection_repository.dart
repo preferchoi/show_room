@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'models.dart';
+import '../../camera/infrastructure/image_source_provider.dart';
+import '../domain/detection_result.dart';
 import 'yolo_service.dart';
-import 'image_source_provider.dart';
 
 /// Abstraction between the UI layer and any detection backend (mock or YOLO).
 abstract class DetectionRepository {
@@ -124,9 +124,9 @@ class _ImageSize {
 /// - Keep [useMockDetection] in main.dart enabled while validating model
 ///   assets and runtime performance on target devices.
 class YoloDetectionRepository implements DetectionRepository {
-  final YoloService _service;
-
   YoloDetectionRepository(this._service);
+
+  final YoloService _service;
 
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {

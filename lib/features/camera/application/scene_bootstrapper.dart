@@ -4,11 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'app_config.dart';
-import 'image_source_provider.dart';
-import 'scene_state.dart';
-import 'scene_view_page.dart';
-import 'yolo_service.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/state/app_state.dart';
+import '../../camera/infrastructure/image_source_provider.dart';
+import '../../detection/infrastructure/yolo_service.dart';
+import '../presentation/camera_screen.dart';
 
 /// Loads a scene on startup and shows the scene page. The initial load uses the
 /// sample image source so the app can launch with no runtime permissions or
@@ -36,7 +36,6 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
   void initState() {
     super.initState();
     _imageSourceProvider = widget.imageSourceProvider ?? DefaultImageSourceProvider();
-    // Defer the load to the first frame so the provider tree is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrap());
     });
@@ -79,7 +78,7 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
     try {
       final Uint8List bytes =
           await _imageSourceProvider.loadImage(widget.defaultSourceType);
-      await context.read<SceneState>().loadScene(bytes);
+      await context.read<AppState>().updateDetections(bytes);
     } on ImageSourceException catch (err) {
       _showError(err.message);
     } catch (err) {
@@ -141,7 +140,7 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
   @override
   Widget build(BuildContext context) {
     if (useMockDetection || _initStatus == _InitStatus.success) {
-      return SceneViewPage(
+      return CameraScreen(
         imageSourceProvider: _imageSourceProvider,
       );
     }

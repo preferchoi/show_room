@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'models.dart';
+import '../../../detection/domain/detection_result.dart';
 
 /// A tap target that outlines a detected object region.
 class ObjectButton extends StatelessWidget {
