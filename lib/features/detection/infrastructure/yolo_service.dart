@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:meta/meta.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
-import 'models.dart';
+import '../domain/detection_result.dart';
 import 'model_provider.dart';
 
 /// Service that loads a YOLO11n detection model and runs inference on-device.

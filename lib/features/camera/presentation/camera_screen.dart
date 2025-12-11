@@ -1,20 +1,22 @@
-import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'image_source_provider.dart';
-import 'label_localizer.dart';
-import 'l10n/app_localizations.dart';
-import 'models.dart';
-import 'object_button.dart';
-import 'scene_state.dart';
+import '../../../core/state/app_state.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../camera/application/camera_controller.dart';
+import '../../camera/infrastructure/image_source_provider.dart';
+import '../../detection/application/label_localizer.dart';
+import '../../detection/domain/detection_result.dart';
+import 'widgets/detection_overlay.dart';
 
 /// Displays the detected scene image with overlayed interactive regions.
-class SceneViewPage extends StatefulWidget {
-  const SceneViewPage({
+class CameraScreen extends StatefulWidget {
+  const CameraScreen({
     super.key,
     this.imageSourceProvider,
   });
@@ -22,24 +24,25 @@ class SceneViewPage extends StatefulWidget {
   final ImageSourceProvider? imageSourceProvider;
 
   @override
-  State<SceneViewPage> createState() => _SceneViewPageState();
+  State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _SceneViewPageState extends State<SceneViewPage> {
-  late final ImageSourceProvider _imageSourceProvider;
+class _CameraScreenState extends State<CameraScreen> {
+  late final CameraController _cameraController;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _imageSourceProvider = widget.imageSourceProvider ?? DefaultImageSourceProvider();
+    _cameraController =
+        CameraController(imageSourceProvider: widget.imageSourceProvider);
   }
 
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
-    final sceneState = context.watch<SceneState>();
-    final scene = sceneState.currentScene;
+    final appState = context.watch<AppState>();
+    final scene = appState.currentScene;
 
     final labelLocalizer = LabelLocalizer();
 
@@ -51,9 +54,9 @@ class _SceneViewPageState extends State<SceneViewPage> {
             tooltip: '재실행',
             onPressed: _isLoading || scene == null
                 ? null
-                : () async {
-                    await _rerunDetection(sceneState);
-                  },
+                  : () async {
+                      await _rerunDetection(appState);
+                    },
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
@@ -84,65 +87,18 @@ class _SceneViewPageState extends State<SceneViewPage> {
                 ? Center(
                     child: Text(localizations?.noSceneLoaded ?? 'No scene loaded yet'),
                   )
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      // Calculate how the original image will be scaled when fitted inside
-                      // the available space using BoxFit.contain semantics.
-                      final scale = min(
-                        constraints.maxWidth / scene.width,
-                        constraints.maxHeight / scene.height,
-                      );
-                      final displayWidth = scene.width * scale;
-                      final displayHeight = scene.height * scale;
-                      final horizontalOffset =
-                          (constraints.maxWidth - displayWidth) / 2;
-                      final verticalOffset =
-                          (constraints.maxHeight - displayHeight) / 2;
-
-                      return Stack(
-                        children: [
-                          // Background image fitted to the available space.
-                          Center(
-                            child: Image.memory(
-                              scene.imageBytes,
-                              width: displayWidth,
-                              height: displayHeight,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                          // Overlay all detected objects scaled into the fitted image space.
-                          ...scene.objects.map((object) {
-                            final scaledLeft =
-                                object.bbox.left * scale + horizontalOffset;
-                            final scaledTop = object.bbox.top * scale + verticalOffset;
-                            final scaledWidth = object.bbox.width * scale;
-                            final scaledHeight = object.bbox.height * scale;
-                            final isSelected =
-                                sceneState.selectedObjectId == object.id;
-
-                            return Positioned(
-                              left: scaledLeft,
-                              top: scaledTop,
-                              width: scaledWidth,
-                              height: scaledHeight,
-                              child: ObjectButton(
-                                object: object,
-                                isSelected: isSelected,
-                                onTap: () {
-                                  sceneState.selectObject(object.id);
-                                  _showObjectSheet(
-                                    context,
-                                    object,
-                                    labelLocalizer.localize(
-                                      object.label,
-                                      context,
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          }),
-                        ],
+                : DetectionOverlay(
+                    scene: scene,
+                    selectedObjectId: appState.selectedObjectId,
+                    onObjectTap: (object) {
+                      appState.selectObject(object.id);
+                      _showObjectSheet(
+                        context,
+                        object,
+                        labelLocalizer.localize(
+                          object.label,
+                          context,
+                        ),
                       );
                     },
                   ),
@@ -153,16 +109,15 @@ class _SceneViewPageState extends State<SceneViewPage> {
   }
 
   Future<void> _loadFromSource(ImageSourceType sourceType) async {
-    await _runDetection(() => _imageSourceProvider.loadImage(sourceType));
+    await _runDetection(() => _cameraController.loadImage(sourceType));
   }
 
-  Future<void> _rerunDetection(SceneState state) async {
+  Future<void> _rerunDetection(AppState notifier) async {
     await _runDetection(() async {
-      final scene = state.currentScene;
+      final scene = notifier.currentScene;
       if (scene == null) return Uint8List(0);
       return scene.imageBytes;
-    },
-        onInvalidBytesMessage: '감지할 이미지가 없어요.');
+    }, onInvalidBytesMessage: '감지할 이미지가 없어요.');
   }
 
   Future<void> _runDetection(
@@ -181,7 +136,7 @@ class _SceneViewPageState extends State<SceneViewPage> {
         if (onInvalidBytesMessage != null) _showError(onInvalidBytesMessage);
         return;
       }
-      await context.read<SceneState>().loadScene(bytes);
+      await context.read<AppState>().updateDetections(bytes);
     } on ImageSourceException catch (err) {
       _showError(err.message);
     } catch (err, stackTrace) {
@@ -201,8 +156,8 @@ class _SceneViewPageState extends State<SceneViewPage> {
     DetectedObject object,
     String localizedLabel,
   ) {
-    final sceneState = context.read<SceneState>();
-    sceneState.selectObject(object.id);
+    final appState = context.read<AppState>();
+    appState.selectObject(object.id);
 
     final localizations = AppLocalizations.of(context);
     final positionX = object.bbox.left.toStringAsFixed(1);
@@ -282,7 +237,7 @@ class _SceneViewPageState extends State<SceneViewPage> {
                     OutlinedButton.icon(
                       icon: const Icon(Icons.copy_outlined),
                       onPressed: () =>
-                          _copyObjectSummary(localizedLabel, object, sceneState),
+                          _copyObjectSummary(localizedLabel, object, appState),
                       label: Text(
                         localizations?.objectCopyAction ?? 'Copy object summary',
                       ),
@@ -295,10 +250,10 @@ class _SceneViewPageState extends State<SceneViewPage> {
         );
       },
     ).whenComplete(() {
-      final objects = sceneState.currentScene?.objects ?? [];
+      final objects = appState.currentScene?.objects ?? [];
       final stillExists = objects.any((candidate) => candidate.id == object.id);
       if (stillExists) {
-        sceneState.selectObject(object.id);
+        appState.selectObject(object.id);
       }
     });
   }
@@ -315,19 +270,18 @@ class _SceneViewPageState extends State<SceneViewPage> {
       _showError(localizations?.objectSearchError ?? "Couldn't open search link");
     }
 
-    final sceneState = context.read<SceneState>();
-    final stillExists =
-        sceneState.currentScene?.objects.any((candidate) => candidate.id == object.id) ??
-            false;
+    final appState = context.read<AppState>();
+    final stillExists = appState.currentScene?.objects.any((candidate) => candidate.id == object.id) ??
+        false;
     if (stillExists) {
-      sceneState.selectObject(object.id);
+      appState.selectObject(object.id);
     }
   }
 
   Future<void> _copyObjectSummary(
     String localizedLabel,
     DetectedObject object,
-    SceneState sceneState,
+    AppState appState,
   ) async {
     final localizations = AppLocalizations.of(context);
     final positionX = object.bbox.left.toStringAsFixed(1);
@@ -348,11 +302,10 @@ class _SceneViewPageState extends State<SceneViewPage> {
       _showSnack(localizations?.objectCopySuccess ?? 'Copied object info to the clipboard');
     }
 
-    final stillExists =
-        sceneState.currentScene?.objects.any((candidate) => candidate.id == object.id) ??
-            false;
+    final stillExists = appState.currentScene?.objects.any((candidate) => candidate.id == object.id) ??
+        false;
     if (stillExists) {
-      sceneState.selectObject(object.id);
+      appState.selectObject(object.id);
     }
   }
 

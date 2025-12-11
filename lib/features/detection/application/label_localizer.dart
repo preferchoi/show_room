@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'l10n/app_localizations.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// Maps raw detection labels (typically English class names from a model) to
 /// localized, user-visible strings.
