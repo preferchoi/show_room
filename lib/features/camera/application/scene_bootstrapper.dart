@@ -11,8 +11,9 @@ import '../../detection/infrastructure/yolo_service.dart';
 import '../presentation/camera_screen.dart';
 
 /// Loads a scene on startup and shows the scene page. The initial load uses the
-/// sample image source so the app can launch with no runtime permissions or
-/// model files when `useMockDetection` is true.
+/// sample image source when `useMockDetection` is true so the app can launch
+/// with no runtime permissions or model files. Otherwise, the camera is
+/// triggered after the model is initialized.
 class SceneBootstrapper extends StatefulWidget {
   const SceneBootstrapper({
     super.key,
@@ -45,6 +46,8 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
     if (!useMockDetection) {
       await _ensureInterpreterReady();
       if (_initStatus != _InitStatus.success) return;
+      await _detectFromSource(ImageSourceType.camera);
+      return;
     }
     await _loadInitialScene();
   }
@@ -75,14 +78,17 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
   }
 
   Future<void> _loadInitialScene() async {
+    await _detectFromSource(widget.defaultSourceType);
+  }
+
+  Future<void> _detectFromSource(ImageSourceType sourceType) async {
     try {
-      final Uint8List bytes =
-          await _imageSourceProvider.loadImage(widget.defaultSourceType);
+      final Uint8List bytes = await _imageSourceProvider.loadImage(sourceType);
       await context.read<AppState>().updateDetections(bytes);
     } on ImageSourceException catch (err) {
       _showError(err.message);
     } catch (err) {
-      debugPrint('Failed to load initial scene: $err');
+      debugPrint('Failed to load initial scene from $sourceType: $err');
       _showError('이미지를 불러오지 못했어요. 다시 시도해주세요.');
     }
   }
