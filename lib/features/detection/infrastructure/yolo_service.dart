@@ -135,15 +135,28 @@ class YoloService {
     // Prepare output buffer based on the first output tensor shape.
     final Tensor outputTensor = _interpreter!.getOutputTensor(0);
     final List<int> outputShape = outputTensor.shape;
-    final int outputElementCount =
-        outputShape.fold<int>(1, (previous, dim) => previous * dim);
-    final List<double> outputBuffer = List<double>.filled(outputElementCount, 0);
+    final List<List<List<double>>> outputBuffer = List.generate(
+      outputShape[0],
+      (_) => List.generate(
+        outputShape[1],
+        (_) => List<double>.filled(outputShape[2], 0.0),
+      ),
+    );
+
+    final List<List<List<double>>> inputBuffer = _reshapeInput(
+      prep.inputBuffer,
+      _inputHeight,
+      _inputWidth,
+      _inputChannels,
+    );
 
     // Run inference.
-    _interpreter!.run(prep.inputBuffer, outputBuffer);
+    _interpreter!.run(inputBuffer, outputBuffer);
+
+    final List<double> flattenedOutput = _flattenOutput(outputBuffer);
 
     final List<DetectedObject> detections = _parseDetections(
-      outputBuffer,
+      flattenedOutput,
       outputShape,
       prep,
     );
@@ -218,6 +231,40 @@ class YoloService {
       padX: padX.toDouble(),
       padY: padY.toDouble(),
     );
+  }
+
+  List<List<List<double>>> _reshapeInput(
+    Float32List data,
+    int height,
+    int width,
+    int channels,
+  ) {
+    return List.generate(
+      1,
+      (_) => List.generate(
+        height,
+        (y) => List.generate(
+          width,
+          (x) {
+            final int base = (y * width + x) * channels;
+            return List<double>.generate(
+              channels,
+              (ch) => data[base + ch],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  List<double> _flattenOutput(List<List<List<double>>> output3d) {
+    final List<double> flattened = [];
+    for (final matrix in output3d) {
+      for (final row in matrix) {
+        flattened.addAll(row);
+      }
+    }
+    return flattened;
   }
 
   List<DetectedObject> _parseDetections(
