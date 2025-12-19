@@ -143,7 +143,7 @@ class YoloService {
       ),
     );
 
-    final List<List<List<double>>> inputBuffer = _reshapeInput(
+    final List<List<List<List<double>>>> inputBuffer = _reshapeInput(
       prep.inputBuffer,
       _inputHeight,
       _inputWidth,
@@ -233,27 +233,24 @@ class YoloService {
     );
   }
 
-  List<List<List<double>>> _reshapeInput(
+  List<List<List<List<double>>>> _reshapeInput(
     Float32List data,
     int height,
     int width,
     int channels,
   ) {
-    final List<List<List<double>>> input =
-        List.generate(1, (_) => <List<List<double>>>[]);
-    for (int y = 0; y < height; y++) {
-      final List<List<double>> row = <List<double>>[];
-      for (int x = 0; x < width; x++) {
-        final int base = (y * width + x) * channels;
-        final List<double> pixel = List<double>.filled(channels, 0.0);
-        for (int ch = 0; ch < channels; ch++) {
-          pixel[ch] = data[base + ch];
-        }
-        row.add(pixel);
-      }
-      input[0].add(row);
-    }
-    return input;
+    return List.generate(1, (_) {
+      return List.generate(height, (y) {
+        return List.generate(width, (x) {
+          final int base = (y * width + x) * channels;
+          return List<double>.generate(
+            channels,
+            (ch) => data[base + ch],
+            growable: false,
+          );
+        }, growable: false);
+      }, growable: false);
+    }, growable: false);
   }
 
   List<double> _flattenOutput(List<List<List<double>>> output3d) {
