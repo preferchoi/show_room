@@ -239,11 +239,11 @@ class YoloService {
     int width,
     int channels,
   ) {
-    return List.generate(
+    return List.generate<List<List<double>>>(
       1,
-      (_) => List.generate(
+      (_) => List.generate<List<double>>(
         height,
-        (y) => List.generate(
+        (y) => List.generate<List<double>>(
           width,
           (x) {
             final int base = (y * width + x) * channels;
