@@ -4,4 +4,4 @@ import '../../features/camera/infrastructure/image_source_provider.dart';
 // Keep this true while YoloService still contains TODOs (normalization,
 // parsing, labels, etc.) so the UI can run safely end-to-end.
 const bool useMockDetection = false;
-const ImageSourceType defaultImageSource = ImageSourceType.camera;
+const ImageSourceType defaultImageSource = ImageSourceType.sample;

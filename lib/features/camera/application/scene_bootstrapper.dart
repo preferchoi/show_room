@@ -1,27 +1,19 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
-import '../../../core/state/app_state.dart';
 import '../../camera/infrastructure/image_source_provider.dart';
 import '../../detection/infrastructure/yolo_service.dart';
 import '../presentation/camera_screen.dart';
 
-/// Loads a scene on startup and shows the scene page. The initial load uses the
-/// sample image source when `useMockDetection` is true so the app can launch
-/// with no runtime permissions or model files. Otherwise, the camera is
-/// triggered after the model is initialized.
+/// Initializes the detection stack and then shows the camera screen.
 class SceneBootstrapper extends StatefulWidget {
   const SceneBootstrapper({
     super.key,
-    this.defaultSourceType = defaultImageSource,
     this.imageSourceProvider,
   });
 
-  final ImageSourceType defaultSourceType;
   final ImageSourceProvider? imageSourceProvider;
 
   @override
@@ -45,11 +37,7 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
   Future<void> _bootstrap() async {
     if (!useMockDetection) {
       await _ensureInterpreterReady();
-      if (_initStatus != _InitStatus.success) return;
-      await _detectFromSource(ImageSourceType.camera);
-      return;
     }
-    await _loadInitialScene();
   }
 
   Future<void> _ensureInterpreterReady() async {
@@ -74,22 +62,6 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
       });
       _showErrorSnack();
       await _showInitFailureDialog();
-    }
-  }
-
-  Future<void> _loadInitialScene() async {
-    await _detectFromSource(widget.defaultSourceType);
-  }
-
-  Future<void> _detectFromSource(ImageSourceType sourceType) async {
-    try {
-      final Uint8List bytes = await _imageSourceProvider.loadImage(sourceType);
-      await context.read<AppState>().updateDetections(bytes);
-    } on ImageSourceException catch (err) {
-      _showError(err.message);
-    } catch (err) {
-      debugPrint('Failed to load initial scene from $sourceType: $err');
-      _showError('이미지를 불러오지 못했어요. 다시 시도해주세요.');
     }
   }
 
@@ -118,13 +90,6 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
           ],
         );
       },
-    );
-  }
-
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
     );
   }
 
