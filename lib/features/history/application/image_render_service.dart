@@ -162,6 +162,9 @@ ui.Paragraph _buildParagraph(
 }
 
 ui.Color _colorForLabel(String label) {
-  final hue = label.hashCode % 360;
-  return ui.HSLColor.fromAHSL(1.0, hue.toDouble(), 0.7, 0.5).toColor();
+  final hash = label.hashCode;
+  final int r = (hash & 0xFF0000) >> 16;
+  final int g = (hash & 0x00FF00) >> 8;
+  final int b = hash & 0x0000FF;
+  return ui.Color.fromARGB(255, r, g, b);
 }
