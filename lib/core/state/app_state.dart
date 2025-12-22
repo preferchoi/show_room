@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../features/detection/domain/detection_result.dart';
 import '../../features/detection/infrastructure/detection_repository.dart';
+import '../../features/history/domain/detection_capture.dart';
 import '../../features/history/domain/detected_item.dart';
 import '../../features/history/domain/detection_session.dart';
 import '../../features/history/infrastructure/history_repository.dart';
@@ -23,6 +24,7 @@ class AppState extends ChangeNotifier {
   String? selectedObjectId;
   final List<DetectedObject> detectionHistory = [];
   List<DetectionSession> get detectionSessions => _historyRepository.sessions;
+  List<DetectionCapture> get detectionCaptures => _historyRepository.captures;
 
   double confidenceThreshold;
   String modelPath;
@@ -58,6 +60,11 @@ class AppState extends ChangeNotifier {
 
   void addSession(DetectionSession session) {
     _historyRepository.addSession(session);
+    notifyListeners();
+  }
+
+  void addCapture(DetectionCapture capture) {
+    _historyRepository.addCapture(capture);
     notifyListeners();
   }
 
