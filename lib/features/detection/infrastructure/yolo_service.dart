@@ -422,6 +422,7 @@ class YoloService {
           id: 'obj_$i',
           label: det.label,
           bbox: det.bbox,
+          confidence: det.score,
         ),
       );
     }

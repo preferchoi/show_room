@@ -51,6 +51,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<SceneDetectionResult> detectLive(Uint8List imageBytes) async {
+    return _detectionRepository.detect(imageBytes);
+  }
+
   Future<void> reloadCurrentScene() async {
     final scene = currentScene;
     if (scene == null) return;

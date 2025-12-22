@@ -87,6 +87,7 @@ class _SampleObject {
       id: id,
       label: label,
       bbox: scaled,
+      confidence: 0.9,
     );
   }
 }

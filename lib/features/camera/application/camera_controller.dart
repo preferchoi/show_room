@@ -12,4 +12,12 @@ class CameraController {
   Future<Uint8List> loadImage(ImageSourceType sourceType) {
     return _imageSourceProvider.loadImage(sourceType);
   }
+
+  Stream<Uint8List> cameraFrames() {
+    final provider = _imageSourceProvider;
+    if (provider is LiveImageSourceProvider) {
+      return provider.cameraImageStream();
+    }
+    return const Stream<Uint8List>.empty();
+  }
 }
