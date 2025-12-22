@@ -1,5 +1,7 @@
 // import 'dart:typed_data';
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +21,7 @@ import '../../history/application/image_render_service.dart';
 import '../../history/domain/detection_capture.dart';
 import '../../history/presentation/detection_result_screen.dart';
 import 'widgets/detection_overlay.dart';
+import 'widgets/live_person_preview.dart';
 
 /// Displays the detected scene image with overlayed interactive regions.
 class CameraScreen extends StatefulWidget {
@@ -36,12 +39,31 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   late final CameraController _cameraController;
   bool _isLoading = false;
+  Rect? _livePersonBox;
+  DateTime? _livePersonLastSeenAt;
+  DateTime _lastInferTime = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _isInferring = false;
+  StreamSubscription<Uint8List>? _previewSubscription;
+  Uint8List? _livePreviewBytes;
+  int? _livePreviewWidth;
+  int? _livePreviewHeight;
+
+  static const Duration _holdDuration = Duration(milliseconds: 500);
+  static const Duration _liveInferInterval = Duration(milliseconds: 120);
+  static const double _livePersonMinConf = 0.35;
 
   @override
   void initState() {
     super.initState();
     _cameraController =
         CameraController(imageSourceProvider: widget.imageSourceProvider);
+    _startLivePreview();
+  }
+
+  @override
+  void dispose() {
+    _previewSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -96,9 +118,7 @@ class _CameraScreenState extends State<CameraScreen> {
           if (_isLoading) const LinearProgressIndicator(),
           Expanded(
             child: scene == null
-                ? Center(
-                    child: Text(localizations?.noSceneLoaded ?? 'No scene loaded yet'),
-                  )
+                ? _buildLivePreview(localizations)
                 : DetectionOverlay(
                     scene: scene,
                     selectedObjectId: appState.selectedObjectId,
@@ -117,6 +137,25 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLivePreview(AppLocalizations? localizations) {
+    final previewBytes = _livePreviewBytes;
+    final previewWidth = _livePreviewWidth;
+    final previewHeight = _livePreviewHeight;
+
+    if (previewBytes == null || previewWidth == null || previewHeight == null) {
+      return Center(
+        child: Text(localizations?.noSceneLoaded ?? 'No scene loaded yet'),
+      );
+    }
+
+    return LivePersonPreview(
+      imageBytes: previewBytes,
+      imageWidth: previewWidth,
+      imageHeight: previewHeight,
+      personBox: _livePersonBox,
     );
   }
 
@@ -171,6 +210,75 @@ class _CameraScreenState extends State<CameraScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _startLivePreview() {
+    _previewSubscription = _cameraController.cameraFrames().listen(
+      _handleLiveFrame,
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Live preview stream error: $error\n$stackTrace');
+      },
+    );
+  }
+
+  Future<void> _handleLiveFrame(Uint8List bytes) async {
+    if (bytes.isEmpty || !mounted) return;
+
+    final now = DateTime.now();
+    if (_isInferring || now.difference(_lastInferTime) < _liveInferInterval) {
+      return;
+    }
+
+    _isInferring = true;
+    _lastInferTime = now;
+
+    try {
+      final result = await context.read<AppState>().detectLive(bytes);
+      if (!mounted) return;
+
+      _livePreviewBytes = result.imageBytes;
+      _livePreviewWidth = result.width;
+      _livePreviewHeight = result.height;
+      _updateLivePersonOverlay(result.objects);
+    } catch (err, stackTrace) {
+      debugPrint('Live preview inference failed: $err\n$stackTrace');
+    } finally {
+      _isInferring = false;
+    }
+  }
+
+  void _updateLivePersonOverlay(List<DetectedObject> objects) {
+    final now = DateTime.now();
+    final List<DetectedObject> candidates = objects.where((object) {
+      final confidence = object.confidence ?? 0;
+      return object.label.toLowerCase() == 'person' && confidence >= _livePersonMinConf;
+    }).toList();
+
+    if (candidates.isNotEmpty) {
+      candidates.sort(
+        (a, b) => (b.confidence ?? 0).compareTo(a.confidence ?? 0),
+      );
+      final best = candidates.first;
+      if (!mounted) return;
+      setState(() {
+        _livePersonBox = best.bbox;
+        _livePersonLastSeenAt = now;
+      });
+      return;
+    }
+
+    final lastSeen = _livePersonLastSeenAt;
+    if (lastSeen != null && now.difference(lastSeen) <= _holdDuration) {
+      return;
+    }
+
+    if (!mounted) return;
+    if (_livePersonBox != null || _livePersonLastSeenAt != null) {
+      setState(() {
+        _livePersonBox = null;
+        _livePersonLastSeenAt = null;
+      });
     }
   }
 

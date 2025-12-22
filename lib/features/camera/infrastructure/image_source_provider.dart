@@ -26,9 +26,14 @@ abstract class ImageSourceProvider {
   Future<Uint8List> loadImage(ImageSourceType sourceType);
 }
 
+/// Optional interface for providers that can stream live camera frames.
+abstract class LiveImageSourceProvider {
+  Stream<Uint8List> cameraImageStream();
+}
+
 /// Default provider that supports the built-in sample image and platform image
 /// pickers (gallery/camera) via the image_picker plugin.
-class DefaultImageSourceProvider implements ImageSourceProvider {
+class DefaultImageSourceProvider implements ImageSourceProvider, LiveImageSourceProvider {
   DefaultImageSourceProvider({ImagePicker? imagePicker})
       : _picker = imagePicker ?? ImagePicker();
 
@@ -67,6 +72,14 @@ class DefaultImageSourceProvider implements ImageSourceProvider {
     }
 
     return bytes;
+  }
+
+  @override
+  Stream<Uint8List> cameraImageStream() {
+    // image_picker does not provide a live preview stream. Returning an empty
+    // stream keeps the API stable while allowing alternate implementations
+    // to provide real-time camera frames.
+    return const Stream<Uint8List>.empty();
   }
 
   List<Permission> get _galleryPermissions {

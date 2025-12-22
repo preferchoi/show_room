@@ -55,12 +55,14 @@ class DetectedObject {
   final String label; // e.g. "chair", "desk"
   final Rect bbox; // Bounding box in original image coordinates
   final MaskData? mask; // Optional segmentation mask
+  final double? confidence; // Optional confidence score
 
   const DetectedObject({
     required this.id,
     required this.label,
     required this.bbox,
     this.mask,
+    this.confidence,
   });
 }
 

@@ -338,6 +338,7 @@ class YoloSegService {
         label: d.label,
         bbox: d.bboxOriginalSpace,
         mask: mask,
+        confidence: d.confidence,
       );
     }).toList();
   }
