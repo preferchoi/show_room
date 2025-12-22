@@ -3,6 +3,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
+
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +15,9 @@ import '../../camera/application/camera_controller.dart';
 import '../../camera/infrastructure/image_source_provider.dart';
 import '../../detection/application/label_localizer.dart';
 import '../../detection/domain/detection_result.dart';
+import '../../history/application/image_render_service.dart';
+import '../../history/domain/detection_capture.dart';
+import '../../history/presentation/detection_result_screen.dart';
 import 'widgets/detection_overlay.dart';
 
 /// Displays the detected scene image with overlayed interactive regions.
@@ -64,7 +70,10 @@ class _CameraScreenState extends State<CameraScreen> {
             onPressed: _isLoading
                 ? null
                 : () async {
-                    await _loadFromSource(ImageSourceType.gallery);
+                    await _loadFromSource(
+                      ImageSourceType.gallery,
+                      openResult: false,
+                    );
                   },
             icon: const Icon(Icons.photo_library_outlined),
           ),
@@ -73,7 +82,10 @@ class _CameraScreenState extends State<CameraScreen> {
             onPressed: _isLoading
                 ? null
                 : () async {
-                    await _loadFromSource(ImageSourceType.camera);
+                    await _loadFromSource(
+                      ImageSourceType.camera,
+                      openResult: true,
+                    );
                   },
             icon: const Icon(Icons.camera_alt_outlined),
           ),
@@ -108,8 +120,14 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  Future<void> _loadFromSource(ImageSourceType sourceType) async {
-    await _runDetection(() => _cameraController.loadImage(sourceType));
+  Future<void> _loadFromSource(
+    ImageSourceType sourceType, {
+    required bool openResult,
+  }) async {
+    await _runDetection(
+      () => _cameraController.loadImage(sourceType),
+      openResult: openResult,
+    );
   }
 
   Future<void> _rerunDetection(AppState notifier) async {
@@ -123,6 +141,7 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _runDetection(
     Future<Uint8List> Function() bytesLoader, {
     String? onInvalidBytesMessage,
+    bool openResult = false,
   }) async {
     if (_isLoading) return;
 
@@ -136,7 +155,11 @@ class _CameraScreenState extends State<CameraScreen> {
         if (onInvalidBytesMessage != null) _showError(onInvalidBytesMessage);
         return;
       }
-      await context.read<AppState>().updateDetections(bytes);
+      final appState = context.read<AppState>();
+      await appState.updateDetections(bytes);
+      if (openResult) {
+        await _saveAndNavigateResult(appState);
+      }
     } on ImageSourceException catch (err) {
       _showError(err.message);
     } catch (err, stackTrace) {
@@ -149,6 +172,74 @@ class _CameraScreenState extends State<CameraScreen> {
         });
       }
     }
+  }
+
+  Future<void> _saveAndNavigateResult(AppState appState) async {
+    final scene = appState.currentScene;
+    if (scene == null) return;
+
+    final now = DateTime.now().toLocal();
+    final timestampText = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+    final filenameTimestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
+
+    final originalStampedBytes = await drawTimestampWatermark(
+      originalBytes: scene.imageBytes,
+      timestampText: timestampText,
+    );
+    final detectionStampedBytes = await drawDetectionsOverlay(
+      originalBytes: scene.imageBytes,
+      timestampText: timestampText,
+      detections: scene.objects,
+    );
+
+    final directory = Directory('${Directory.systemTemp.path}/show_room_captures');
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+
+    final originalFile = File(
+      '${directory.path}/original_$filenameTimestamp.png',
+    );
+    final detectionFile = File(
+      '${directory.path}/detect_$filenameTimestamp.png',
+    );
+
+    await originalFile.writeAsBytes(originalStampedBytes, flush: true);
+    await detectionFile.writeAsBytes(detectionStampedBytes, flush: true);
+
+    final summary = _buildSummary(scene.objects);
+    final capture = DetectionCapture(
+      timestamp: timestampText,
+      originalImagePath: originalFile.path,
+      detectionImagePath: detectionFile.path,
+      summary: summary,
+    );
+    appState.addCapture(capture);
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DetectionResultScreen(
+          timestamp: timestampText,
+          originalImagePath: originalFile.path,
+          detectionImagePath: detectionFile.path,
+          summary: summary,
+        ),
+      ),
+    );
+  }
+
+  String _buildSummary(List<DetectedObject> objects) {
+    if (objects.isEmpty) return 'No objects detected';
+    final counts = <String, int>{};
+    final localizer = LabelLocalizer();
+    for (final object in objects) {
+      final label = localizer.localize(object.label, context);
+      counts.update(label, (value) => value + 1, ifAbsent: () => 1);
+    }
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries.map((entry) => '${entry.key}:${entry.value}').join(' ');
   }
 
   void _showObjectSheet(
