@@ -16,7 +16,7 @@ class CameraController {
   Stream<Uint8List> cameraFrames() {
     final provider = _imageSourceProvider;
     if (provider is LiveImageSourceProvider) {
-      return provider.cameraImageStream();
+      return (provider as LiveImageSourceProvider).cameraImageStream();
     }
     return const Stream<Uint8List>.empty();
   }
