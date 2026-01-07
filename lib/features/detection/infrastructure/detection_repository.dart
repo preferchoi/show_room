@@ -20,12 +20,18 @@ class MockDetectionRepository implements DetectionRepository {
   Uint8List? _cachedBytes;
 
   Future<_ImageSize?> _decodeImageSize(Uint8List bytes) async {
+    ImageCodec? codec;
+    Image? image;
     try {
-      final codec = await instantiateImageCodec(bytes);
+      codec = await instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
-      return _ImageSize(frame.image.width, frame.image.height);
+      image = frame.image;
+      return _ImageSize(image.width, image.height);
     } catch (_) {
       return null;
+    } finally {
+      image?.dispose();
+      codec?.dispose();
     }
   }
 
