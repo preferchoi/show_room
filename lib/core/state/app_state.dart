@@ -54,6 +54,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> ensureDetectionReady() async {
+    await _detectionRepository.init();
+  }
+
   void _trimDetectionHistory() {
     if (detectionHistory.length <= maxDetectionHistory) return;
     final int overflow = detectionHistory.length - maxDetectionHistory;

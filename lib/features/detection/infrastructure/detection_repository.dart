@@ -8,6 +8,7 @@ import 'yolo_service.dart';
 
 /// Abstraction between the UI layer and any detection backend (mock or YOLO).
 abstract class DetectionRepository {
+  Future<void> init();
   Future<SceneDetectionResult> detect(Uint8List imageBytes);
 }
 
@@ -42,6 +43,9 @@ class MockDetectionRepository implements DetectionRepository {
     _cachedBytes = base64Decode(sampleImageBase64);
     return _cachedBytes!;
   }
+
+  @override
+  Future<void> init() async {}
 
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {
@@ -134,6 +138,11 @@ class YoloDetectionRepository implements DetectionRepository {
   YoloDetectionRepository(this._service);
 
   final YoloService _service;
+
+  @override
+  Future<void> init() async {
+    await _service.init();
+  }
 
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {

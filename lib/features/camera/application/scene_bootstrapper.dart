@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/state/app_state.dart';
 import '../../camera/infrastructure/image_source_provider.dart';
-import '../../detection/infrastructure/yolo_service.dart';
 import '../presentation/camera_screen.dart';
 
 /// Initializes the detection stack and then shows the camera screen.
@@ -48,7 +49,7 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
     });
 
     try {
-      await YoloService.instance.init();
+      await context.read<AppState>().ensureDetectionReady();
       if (!mounted) return;
       setState(() {
         _initStatus = _InitStatus.success;
