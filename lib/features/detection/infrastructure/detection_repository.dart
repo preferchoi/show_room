@@ -1,6 +1,6 @@
-import 'dart:convert';
+import 'dart:convert' as co;
 import 'dart:typed_data';
-import 'dart:ui';
+import 'dart:ui' as ui;
 
 import '../../camera/infrastructure/image_source_provider.dart';
 import '../domain/detection_result.dart';
@@ -8,6 +8,7 @@ import 'yolo_service.dart';
 
 /// Abstraction between the UI layer and any detection backend (mock or YOLO).
 abstract class DetectionRepository {
+  Future<void> init();
   Future<SceneDetectionResult> detect(Uint8List imageBytes);
 }
 
@@ -20,12 +21,20 @@ class MockDetectionRepository implements DetectionRepository {
   Uint8List? _cachedBytes;
 
   Future<_ImageSize?> _decodeImageSize(Uint8List bytes) async {
+    ui.Codec? codec;
+    ui.Image? image;
     try {
-      final codec = await instantiateImageCodec(bytes);
+      codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
-      return _ImageSize(frame.image.width, frame.image.height);
+      image = frame.image;
+      final width = image.width;
+      final height = image.height;
+      return _ImageSize(width, height);
     } catch (_) {
       return null;
+    } finally {
+      image?.dispose();
+      codec?.dispose();
     }
   }
 
@@ -33,9 +42,12 @@ class MockDetectionRepository implements DetectionRepository {
     if (_cachedBytes != null) return _cachedBytes!;
     // Decode the embedded base64 image instead of depending on an external
     // asset. This guarantees the mock flow works offline and in tests.
-    _cachedBytes = base64Decode(sampleImageBase64);
+    _cachedBytes = co.base64Decode(sampleImageBase64);
     return _cachedBytes!;
   }
+
+  @override
+  Future<void> init() async {}
 
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {
@@ -74,10 +86,10 @@ class _SampleObject {
 
   final String id;
   final String label;
-  final Rect bbox;
+  final ui.Rect bbox;
 
   DetectedObject toDetected({required double scaleX, required double scaleY}) {
-    final Rect scaled = Rect.fromLTRB(
+    final ui.Rect scaled = ui.Rect.fromLTRB(
       bbox.left * scaleX,
       bbox.top * scaleY,
       bbox.right * scaleX,
@@ -98,17 +110,17 @@ const List<_SampleObject> _sampleObjects = [
   _SampleObject(
     id: 'desk_1',
     label: 'Desk',
-    bbox: Rect.fromLTWH(80, 180, 200, 140),
+    bbox: ui.Rect.fromLTWH(80, 180, 200, 140),
   ),
   _SampleObject(
     id: 'chair_1',
     label: 'Chair',
-    bbox: Rect.fromLTWH(320, 200, 120, 140),
+    bbox: ui.Rect.fromLTWH(320, 200, 120, 140),
   ),
   _SampleObject(
     id: 'plant_1',
     label: 'Plant',
-    bbox: Rect.fromLTWH(480, 100, 70, 120),
+    bbox: ui.Rect.fromLTWH(480, 100, 70, 120),
   ),
 ];
 
@@ -128,6 +140,11 @@ class YoloDetectionRepository implements DetectionRepository {
   YoloDetectionRepository(this._service);
 
   final YoloService _service;
+
+  @override
+  Future<void> init() async {
+    await _service.init();
+  }
 
   @override
   Future<SceneDetectionResult> detect(Uint8List imageBytes) async {

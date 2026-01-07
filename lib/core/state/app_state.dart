@@ -10,6 +10,8 @@ import '../../features/history/domain/detection_session.dart';
 import '../../features/history/infrastructure/history_repository.dart';
 
 class AppState extends ChangeNotifier {
+  static const int maxDetectionHistory = 200;
+
   AppState(
     this._detectionRepository, {
     HistoryRepository? historyRepository,
@@ -33,6 +35,7 @@ class AppState extends ChangeNotifier {
     final result = await _detectionRepository.detect(imageBytes);
     currentScene = result;
     detectionHistory.addAll(result.objects);
+    _trimDetectionHistory();
     _historyRepository.addSession(
       DetectionSession(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -49,6 +52,16 @@ class AppState extends ChangeNotifier {
     );
     selectedObjectId = null;
     notifyListeners();
+  }
+
+  Future<void> ensureDetectionReady() async {
+    await _detectionRepository.init();
+  }
+
+  void _trimDetectionHistory() {
+    if (detectionHistory.length <= maxDetectionHistory) return;
+    final int overflow = detectionHistory.length - maxDetectionHistory;
+    detectionHistory.removeRange(0, overflow);
   }
 
   Future<SceneDetectionResult> detectLive(Uint8List imageBytes) async {
