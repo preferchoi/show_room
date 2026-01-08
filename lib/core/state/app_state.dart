@@ -1,5 +1,5 @@
 import 'dart:collection';
-import 'dart:typed_data';
+import 'dart:typed_data' as td;
 
 import 'package:flutter/foundation.dart';
 
@@ -38,7 +38,7 @@ class AppState extends ChangeNotifier {
   double confidenceThreshold;
   String modelPath;
 
-  Future<void> updateDetections(Uint8List imageBytes) async {
+  Future<void> updateDetections(td.Uint8List imageBytes) async {
     final result = await _detectionRepository.detect(imageBytes);
     currentScene = result;
     _detectionHistory.addAll(result.objects);
@@ -82,7 +82,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<SceneDetectionResult> detectLive(Uint8List imageBytes) async {
+  Future<SceneDetectionResult> detectLive(td.Uint8List imageBytes) async {
     return _detectionRepository.detect(imageBytes);
   }
 
