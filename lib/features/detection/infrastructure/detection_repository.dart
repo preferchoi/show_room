@@ -33,6 +33,8 @@ class MockDetectionRepository implements DetectionRepository {
     } catch (_) {
       return null;
     } finally {
+      // This decode path is metadata-only; dispose decoded resources here
+      // to avoid leaking image/codec handles.
       image?.dispose();
       codec?.dispose();
     }

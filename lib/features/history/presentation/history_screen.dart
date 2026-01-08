@@ -16,7 +16,16 @@ class HistoryScreen extends StatelessWidget {
         title: const Text('검출 기록'),
       ),
       body: history.isEmpty
-          ? const Center(child: Text('아직 감지된 객체가 없어요.'))
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text('검출한 물체가 없어요.'),
+                  SizedBox(height: 8),
+                  Text('카메라에서 탐지를 실행하면 기록이 쌓입니다.'),
+                ],
+              ),
+            )
           : ListView.separated(
               itemCount: history.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
