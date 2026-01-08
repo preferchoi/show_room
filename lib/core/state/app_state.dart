@@ -1,4 +1,5 @@
-// import 'dart:typed_data';
+import 'dart:collection';
+import 'dart:typed_data' as td;
 
 import 'package:flutter/foundation.dart';
 
@@ -17,24 +18,30 @@ class AppState extends ChangeNotifier {
     HistoryRepository? historyRepository,
     this.confidenceThreshold = 0.25,
     this.modelPath = 'assets/models/yolo11n.tflite',
-  }) : _historyRepository = historyRepository ?? HistoryRepository();
+  }) : _historyRepository = historyRepository ?? InMemoryHistoryRepository();
 
   final DetectionRepository _detectionRepository;
   final HistoryRepository _historyRepository;
 
   SceneDetectionResult? currentScene;
   String? selectedObjectId;
-  final List<DetectedObject> detectionHistory = [];
+  final ListQueue<DetectedObject> _detectionHistory = ListQueue<DetectedObject>();
   List<DetectionSession> get detectionSessions => _historyRepository.sessions;
   List<DetectionCapture> get detectionCaptures => _historyRepository.captures;
+  List<DetectedObject> get detectionHistory => _detectionHistory.toList(growable: false);
+
+  bool detectionReady = false;
+  bool detectionInitializing = false;
+  String? detectionInitError;
+  Future<bool>? _detectionInitFuture;
 
   double confidenceThreshold;
   String modelPath;
 
-  Future<void> updateDetections(Uint8List imageBytes) async {
+  Future<void> updateDetections(td.Uint8List imageBytes) async {
     final result = await _detectionRepository.detect(imageBytes);
     currentScene = result;
-    detectionHistory.addAll(result.objects);
+    _detectionHistory.addAll(result.objects);
     _trimDetectionHistory();
     _historyRepository.addSession(
       DetectionSession(
@@ -54,17 +61,28 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> ensureDetectionReady() async {
-    await _detectionRepository.init();
+  Future<bool> ensureDetectionReady() async {
+    if (detectionReady) return true;
+    if (detectionInitializing && _detectionInitFuture != null) {
+      return _detectionInitFuture!;
+    }
+
+    detectionInitializing = true;
+    detectionInitError = null;
+    notifyListeners();
+
+    final future = _initializeDetection();
+    _detectionInitFuture = future;
+    return future;
   }
 
   void _trimDetectionHistory() {
-    if (detectionHistory.length <= maxDetectionHistory) return;
-    final int overflow = detectionHistory.length - maxDetectionHistory;
-    detectionHistory.removeRange(0, overflow);
+    while (_detectionHistory.length > maxDetectionHistory) {
+      _detectionHistory.removeFirst();
+    }
   }
 
-  Future<SceneDetectionResult> detectLive(Uint8List imageBytes) async {
+  Future<SceneDetectionResult> detectLive(td.Uint8List imageBytes) async {
     return _detectionRepository.detect(imageBytes);
   }
 
@@ -98,5 +116,24 @@ class AppState extends ChangeNotifier {
   void setModelPath(String value) {
     modelPath = value;
     notifyListeners();
+  }
+
+  Future<bool> _initializeDetection() async {
+    try {
+      await _detectionRepository.init();
+      detectionReady = true;
+      detectionInitializing = false;
+      detectionInitError = null;
+      notifyListeners();
+      return true;
+    } catch (err) {
+      detectionReady = false;
+      detectionInitializing = false;
+      detectionInitError = err.toString();
+      notifyListeners();
+      return false;
+    } finally {
+      _detectionInitFuture = null;
+    }
   }
 }

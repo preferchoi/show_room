@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/state/app_state.dart';
 import '../../camera/infrastructure/image_source_provider.dart';
 import '../presentation/camera_screen.dart';
@@ -23,8 +22,6 @@ class SceneBootstrapper extends StatefulWidget {
 
 class _SceneBootstrapperState extends State<SceneBootstrapper> {
   late final ImageSourceProvider _imageSourceProvider;
-  _InitStatus _initStatus = useMockDetection ? _InitStatus.success : _InitStatus.idle;
-  String? _initErrorMessage;
 
   @override
   void initState() {
@@ -36,107 +33,65 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
   }
 
   Future<void> _bootstrap() async {
-    if (!useMockDetection) {
-      await _ensureInterpreterReady();
-    }
+    await _ensureInterpreterReady();
   }
 
   Future<void> _ensureInterpreterReady() async {
-    if (_initStatus == _InitStatus.initializing) return;
-    setState(() {
-      _initStatus = _InitStatus.initializing;
-      _initErrorMessage = null;
-    });
-
-    try {
-      await context.read<AppState>().ensureDetectionReady();
-      if (!mounted) return;
-      setState(() {
-        _initStatus = _InitStatus.success;
-      });
-    } catch (err, stackTrace) {
-      debugPrint('Failed to initialize interpreter: $err\n$stackTrace');
-      if (!mounted) return;
-      setState(() {
-        _initStatus = _InitStatus.error;
-        _initErrorMessage = '모델 초기화에 실패했어요. 다시 시도해주세요.';
-      });
-      _showErrorSnack();
-      await _showInitFailureDialog();
-    }
-  }
-
-  Future<void> _showInitFailureDialog() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('모델을 불러오지 못했어요'),
-          content: Text(_initErrorMessage ?? '잠시 후 다시 시도해주세요.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('닫기'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                unawaited(_bootstrap());
-              },
-              child: const Text('다시 시도'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showErrorSnack() {
-    if (!mounted || _initErrorMessage == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_initErrorMessage!),
-        action: SnackBarAction(
-          label: '재시도',
-          onPressed: () {
-            unawaited(_bootstrap());
-          },
-        ),
-      ),
-    );
+    await context.read<AppState>().ensureDetectionReady();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (useMockDetection || _initStatus == _InitStatus.success) {
+    final appState = context.watch<AppState>();
+
+    if (appState.detectionReady) {
       return CameraScreen(
         imageSourceProvider: _imageSourceProvider,
       );
     }
 
+    final errorMessage = appState.detectionInitError;
+    final isInitializing =
+        appState.detectionInitializing || (!appState.detectionReady && errorMessage == null);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('초기화 중'),
+        title: Text(
+          isInitializing ? '초기화 중' : '탐지 초기화 실패',
+        ),
       ),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_initStatus == _InitStatus.initializing) ...[
+            if (isInitializing) ...[
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
               const Text('모델을 불러오는 중입니다...'),
             ] else ...[
               const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
-              Text(_initErrorMessage ?? '모델 초기화에 실패했어요.'),
+              const Text('탐지 초기화 실패'),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  errorMessage,
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => unawaited(_bootstrap()),
-                child: const Text('다시 시도'),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => unawaited(_bootstrap()),
+                    child: const Text('재시도'),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: const Text('뒤로가기'),
+                  ),
+                ],
               ),
             ],
           ],
@@ -144,11 +99,4 @@ class _SceneBootstrapperState extends State<SceneBootstrapper> {
       ),
     );
   }
-}
-
-enum _InitStatus {
-  idle,
-  initializing,
-  success,
-  error,
 }

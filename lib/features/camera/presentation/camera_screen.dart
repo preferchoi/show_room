@@ -47,6 +47,7 @@ class _CameraScreenState extends State<CameraScreen> {
   Uint8List? _livePreviewBytes;
   int? _livePreviewWidth;
   int? _livePreviewHeight;
+  bool _detectionNotReadyNotified = false;
 
   static const Duration _holdDuration = Duration(milliseconds: 500);
   static const Duration _liveInferInterval = Duration(milliseconds: 120);
@@ -184,6 +185,13 @@ class _CameraScreenState extends State<CameraScreen> {
   }) async {
     if (_isLoading) return;
 
+    final appState = context.read<AppState>();
+    if (!appState.detectionReady) {
+      _notifyDetectionNotReady();
+      return;
+    }
+    _detectionNotReadyNotified = false;
+
     setState(() {
       _isLoading = true;
     });
@@ -194,7 +202,6 @@ class _CameraScreenState extends State<CameraScreen> {
         if (onInvalidBytesMessage != null) _showError(onInvalidBytesMessage);
         return;
       }
-      final appState = context.read<AppState>();
       await appState.updateDetections(bytes);
       if (openResult) {
         await _saveAndNavigateResult(appState);
@@ -225,6 +232,13 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _handleLiveFrame(Uint8List bytes) async {
     if (bytes.isEmpty || !mounted) return;
 
+    final appState = context.read<AppState>();
+    if (!appState.detectionReady) {
+      _notifyDetectionNotReady();
+      return;
+    }
+    _detectionNotReadyNotified = false;
+
     final now = DateTime.now();
     if (_isInferring || now.difference(_lastInferTime) < _liveInferInterval) {
       return;
@@ -234,7 +248,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _lastInferTime = now;
 
     try {
-      final result = await context.read<AppState>().detectLive(bytes);
+      final result = await appState.detectLive(bytes);
       if (!mounted) return;
 
       _livePreviewBytes = result.imageBytes;
@@ -513,6 +527,12 @@ class _CameraScreenState extends State<CameraScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  void _notifyDetectionNotReady() {
+    if (_detectionNotReadyNotified) return;
+    _detectionNotReadyNotified = true;
+    _showError('탐지가 초기화되지 않았어요. 다시 시도해주세요.');
   }
 
   void _showSnack(String message) {
